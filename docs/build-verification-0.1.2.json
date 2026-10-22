@@ -1,0 +1,44 @@
+{
+  "version": "0.1.2",
+  "versionCode": 3,
+  "minSdk": 34,
+  "sha256": "2642a55908e38182e078a94a5a6c9925f8fca1900489874a66f07d113b807fe4",
+  "bytes": 58709415,
+  "tests": {
+    "core": 40,
+    "webdav": 7,
+    "deviceDistinct": 62,
+    "totalDistinct": 109,
+    "deviceFullRun": 61,
+    "finalDocumentRegression": 10,
+    "deviceLogs": [
+      "artifacts/ui-parity/instrumentation-verified.txt",
+      "artifacts/ui-parity/instrumentation-eof-final.txt"
+    ],
+    "note": "Final document regression includes 9 existing tests and 1 new EOF test; reruns are not added to the distinct total."
+  },
+  "lintErrors": 0,
+  "lint": {
+    "debug": {
+      "Warning": 371,
+      "Hint": 2
+    },
+    "release": {
+      "Warning": 371,
+      "Hint": 2
+    }
+  },
+  "nativePageBytes": 16384,
+  "iosBaselineUnchanged": true,
+  "iosSourceFilesChecked": 223,
+  "iosUiSwiftFilesAudited": 108,
+  "stringKeysPerLocale": 340,
+  "evidenceDirectory": "artifacts/ui-parity",
+  "sourceBranch": "main",
+  "outstanding": [
+    "physical devices and OEM power management",
+    "real Nutstore/WebDAV account",
+    "full TalkBack and real Chinese IME flows",
+    "process-death recovery beyond tested configuration changes"
+  ]
+}

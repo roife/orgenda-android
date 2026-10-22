@@ -1,0 +1,21 @@
+{
+  "version": "0.1.0",
+  "versionCode": 1,
+  "minSdk": 34,
+  "sha256": "d4fc638c2443b5f0725b410bbb3663eb67f1cc2db3e687ad002b23bbe44c7609",
+  "bytes": 54828439,
+  "tests": {
+    "core": 20,
+    "webdav": 6,
+    "device16k": 15
+  },
+  "lintErrors": 0,
+  "nativePageBytes": 16384,
+  "iosBaselineUnchanged": true,
+  "roundtripExactBytes": true,
+  "outstanding": [
+    "physical devices and OEM power management",
+    "real Nutstore/WebDAV account",
+    "full TalkBack and real Chinese IME flows"
+  ]
+}

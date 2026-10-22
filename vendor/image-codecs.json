@@ -1,0 +1,12 @@
+[
+  {
+    "name": "libtiff",
+    "url": "https://download.osgeo.org/libtiff/tiff-4.7.1.tar.gz",
+    "sha256": "f698d94f3103da8ca7438d84e0344e453fe0ba3b7486e04c5bf7a9a3fabe9b69"
+  },
+  {
+    "name": "libjpeg-turbo",
+    "url": "https://github.com/libjpeg-turbo/libjpeg-turbo/releases/download/3.2.0/libjpeg-turbo-3.2.0.tar.gz",
+    "sha256": "6f30092cef9fb839779646608f4ee14ae3cbac989c47fa05e841b0841f09878e"
+  }
+]

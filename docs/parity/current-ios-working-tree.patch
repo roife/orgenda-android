@@ -1,0 +1,65 @@
+diff --git a/Orgenda/Features/Files/Document/DocumentOutline.swift b/Orgenda/Features/Files/Document/DocumentOutline.swift
+index a037d31..790da81 100644
+--- a/Orgenda/Features/Files/Document/DocumentOutline.swift
++++ b/Orgenda/Features/Files/Document/DocumentOutline.swift
+@@ -408,20 +408,14 @@ private struct DocumentOutlineBranch: View {
+     let onSelect: (DocumentOutlineNode) -> Void
+ 
+     var body: some View {
+-        Group {
+-            if node.children.isEmpty {
+-                headingRow
+-            } else if isFiltering {
++        VStack(alignment: .leading, spacing: 0) {
++            HStack(alignment: .top, spacing: 0) {
++                disclosureControl
+                 headingRow
++            }
++            if !node.children.isEmpty && isExpanded {
+                 children
+-            } else {
+-                DisclosureGroup(isExpanded: expansion) {
+-                    children
+-                } label: {
+-                    // Keep the title action out of the system disclosure target.
+-                    headingRow.padding(.trailing, 44)
+-                }
+-                .accessibilityIdentifier("org.document.outline.disclosure.\(node.startByte)")
++                    .padding(.leading, 20)
+             }
+         }
+         .overlay(alignment: dropTarget?.placement == .before ? .top : .bottom) {
+@@ -440,6 +434,33 @@ private struct DocumentOutlineBranch: View {
+             : "org.document.outline.disclosure.\(node.startByte)")
+     }
+ 
++    private var isExpanded: Bool {
++        isFiltering || expandedHeadingIDs.contains(node.id)
++    }
++
++    @ViewBuilder
++    private var disclosureControl: some View {
++        if node.children.isEmpty {
++            Color.clear
++                .frame(width: 44, height: 44)
++                .accessibilityHidden(true)
++        } else {
++            Button { expansion.wrappedValue.toggle() } label: {
++                Image(systemName: "chevron.right")
++                    .font(.system(size: 14, weight: .semibold))
++                    .foregroundStyle(.secondary)
++                    .rotationEffect(.degrees(isExpanded ? 90 : 0))
++                    .frame(width: 44, height: 44)
++                    .contentShape(Rectangle())
++            }
++            .buttonStyle(.plain)
++            .disabled(isFiltering)
++            .accessibilityLabel(isExpanded ? "Collapse \(node.title)" : "Expand \(node.title)")
++            .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
++            .accessibilityIdentifier("org.document.outline.toggle.\(node.startByte)")
++        }
++    }
++
+     private var headingRow: some View {
+         Button { onSelect(node) } label: {
+             HStack(alignment: .firstTextBaseline, spacing: 8) {

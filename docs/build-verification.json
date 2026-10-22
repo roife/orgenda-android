@@ -1,0 +1,52 @@
+{
+  "version": "0.1.3",
+  "versionCode": 4,
+  "minSdk": 34,
+  "sha256": "3d0360516090e8964b022922db4c77f65a6a3f929301847a390c401d73e0024a",
+  "bytes": 58775603,
+  "signingCertificateSha256": "1bc5d142b26c9b8327163ea1b2bf245fb1555834daa6ff13f8b3a72659e07ad0",
+  "tests": {
+    "core": 40,
+    "webdav": 7,
+    "dateLifecycleJvm": 3,
+    "deviceDistinct": 88,
+    "totalDistinct": 138,
+    "deviceFullRun": 88,
+    "deviceFullRunPassed": 87,
+    "finalSettingsRegression": 8,
+    "deviceLogs": [
+      "artifacts/function-parity/instrumentation-final.txt",
+      "artifacts/function-parity/instrumentation-settings-verified.txt"
+    ],
+    "summary": "artifacts/function-parity/test-summary.json",
+    "note": "The full device run had one settings synchronization failure. After correcting asynchronous completion waits and IME/scroll/click synchronization in tests only, all 8 settings tests passed. Latest results cover 88 distinct device tests; reruns are not added to the total."
+  },
+  "lintErrors": 0,
+  "lint": {
+    "debug": {
+      "Warning": 375,
+      "Hint": 4
+    },
+    "release": {
+      "Warning": 375,
+      "Hint": 4
+    }
+  },
+  "nativePageBytes": 16384,
+  "upgradeFrom": "0.1.2",
+  "iosBaselineUnchanged": true,
+  "iosSourceFilesChecked": 223,
+  "iosUiSwiftFilesAudited": 108,
+  "stringKeysPerLocale": 341,
+  "evidenceDirectory": "artifacts/function-parity",
+  "sourceBranch": "main",
+  "outstanding": [
+    "preview mutations do not all share the source undo stack",
+    "outline workflow labels still show raw tokens",
+    "outline navigation does not reopen a hidden keyboard",
+    "physical devices and OEM power management",
+    "real Nutstore/WebDAV account",
+    "full TalkBack and real Chinese IME flows",
+    "process-death recovery beyond tested configuration changes"
+  ]
+}

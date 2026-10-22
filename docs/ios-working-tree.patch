@@ -1,0 +1,1220 @@
+Orgenda/Components/OrgItemRow.swift --- Swift
+134 134             .contextMenu { contextActions } preview: { OrgItemContextPreview(item: item) }
+135 135         }
+136 136         .padding(.leading, -8)
+... 137         .padding(.vertical, 1)
+137 138     }
+138 139 
+139 140     @ViewBuilder
+
+Orgenda/Domain/Org/Mutations/OrgSourceMutation.swift --- 1/2 --- Text (2 Swift parse errors, exceeded DFT_PARSE_ERROR_LIMIT, first at 348:56)
+281         // planning/properties. Com  281         // planning/properties. Com
+... bining co-located insertions fixes   ... bining co-located insertions fixes 
+... their order.                         ... their order.
+282         var insertions: [Int: Strin  282         var insertions: [Int: Strin
+... g] = [:]                             ... g] = [:]
+283         if !insertedPlanning.isEmpt  283         if !insertedPlanning.isEmpt
+... y {                                  ... y {
+284             let prefix = heading.te  284             appendInsertion(inserte
+... xt.hasSuffix("\n") ? "" : newline    ... dPlanning.joined(separator: newline
+...                                      ... ) + newline,
+285             insertions[heading.endB  285                             after: 
+... yte] = prefix + insertedPlanning.jo  ... heading, newline: newline, to: &ins
+... ined(separator: newline) + newline   ... ertions)
+286         }                            286         }
+287         if eventNode == nil, let ev  287         if eventNode == nil, let ev
+... entReplacement, !eventReplacement.i  ... entReplacement, !eventReplacement.i
+... sEmpty {                             ... sEmpty {
+288             let insertionPoint = fo  288             appendInsertion(eventRe
+... llowing.last?.endByte ?? heading.en  ... placement + newline, after: followi
+... dByte                                ... ng.last ?? heading,
+289             let preceding = followi  289                             newline
+... ng.last?.text ?? heading.text        ... : newline, to: &insertions)
+290             let prefix = preceding.  ... 
+... hasSuffix("\n") || insertions[inser  ... 
+... tionPoint] != nil ? "" : newline     ... 
+291             insertions[insertionPoi  ... 
+... nt, default: ""] += prefix + eventR  ... 
+... eplacement + newline                 ... 
+292         }                            290         }
+293         guard appendPropertyEdits(r  291         guard appendPropertyEdits(r
+... eplacing: original.properties, with  ... eplacing: original.properties, with
+... : item.properties,                   ... : item.properties,
+294                                   h  292                                   h
+... eading: heading, following: followi  ... eading: heading, following: followi
+... ng, newline: newline,                ... ng, newline: newline,
+295                                   e  293                                   e
+... dits: &edits, insertions: &insertio  ... dits: &edits, insertions: &insertio
+... ns) else { return nil }              ... ns) else { return nil }
+296         if !insertedBody.isEmpty {   294         if !insertedBody.isEmpty {
+297             let insertionPoint = fo  295             appendInsertion(inserte
+... llowing.last?.endByte ?? heading.en  ... dBody, after: following.last ?? hea
+... dByte                                ... ding,
+298             let preceding = followi  ... 
+... ng.last?.text ?? heading.text        ... 
+299             let prefix = preceding.  296                             newline
+... hasSuffix("\n") || insertions[inser  ... : newline, to: &insertions)
+... tionPoint] != nil ? "" : newline     ... 
+300             insertions[insertionPoi  ... 
+... nt, default: ""] += prefix + insert  ... 
+... edBody                               ... 
+301         }                            297         }
+302         for (offset, text) in inser  298         for (offset, text) in inser
+... tions {                              ... tions {
+303             edits.append(OrgSourceM  299             edits.append(OrgSourceM
+... utation(startByte: offset, endByte:  ... utation(startByte: offset, endByte:
+...  offset, replacement: text))         ...  offset, replacement: text))
+
+Orgenda/Domain/Org/Mutations/OrgSourceMutation.swift --- 2/2 --- Text (2 Swift parse errors, exceeded DFT_PARSE_ERROR_LIMIT, first at 348:56)
+364                 insertions[end.star  360                 insertions[end.star
+... tByte, default: ""] += lines         ... tByte, default: ""] += lines
+365             } else {                 361             } else {
+366                 let preceding = fol  362                 let preceding = fol
+... lowing.last(where: { $0.type == "pl  ... lowing.last(where: { $0.type == "pl
+... anning" }) ?? heading                ... anning" }) ?? heading
+367                 let prefix = preced  363                 appendInsertion(":P
+... ing.text.hasSuffix("\n") || inserti  ... ROPERTIES:" + newline + lines + ":E
+... ons[preceding.endByte] != nil ? ""   ... ND:" + newline,
+... : newline                            ... 
+368                 insertions[precedin  364                                 aft
+... g.endByte, default: ""] += prefix +  ... er: preceding, newline: newline, to
+...  ":PROPERTIES:" + newline + lines +  ... : &insertions)
+...  ":END:" + newline                   ... 
+369             }                        365             }
+370         }                            366         }
+371         return true                  367         return true
+372     }                                368     }
+...                                      369 
+...                                      370     private static func appendInser
+...                                      ... tion(_ text: String, after node: Pa
+...                                      ... rsedOrgNode,
+...                                      371                                    
+...                                      ...      newline: String, to insertions
+...                                      ... : inout [Int: String]) {
+...                                      372         let prefix = node.text.hasS
+...                                      ... uffix("\n") || insertions[node.endB
+...                                      ... yte] != nil ? "" : newline
+...                                      373         insertions[node.endByte, de
+...                                      ... fault: ""] += prefix + text
+...                                      374     }
+373 }                                    375 }
+374                                      376 
+375 /// Explicit failures for UTF-8 sou  377 /// Explicit failures for UTF-8 sou
+... rce mutation and supported semantic  ... rce mutation and supported semantic
+...  token                               ...  token
+
+Orgenda/Domain/Org/ParsedOrgDocument.swift --- Swift
+34     var checkboxNode: ParsedOrgNode?  34     var checkboxNode: ParsedOrgNode?
+..  { child(ofType: "checkbox") }        ..  { child(ofType: "checkbox") }
+35                                       35 
+36     var descendantsByID: [String: Pa  36     var descendantsByID: [String: Pa
+.. rsedOrgNode] {                        .. rsedOrgNode] {
+37         var result = [id: self]       37         var result: [String: ParsedO
+..                                       .. rgNode] = [:]
+38         for child in children {       38         func collect(_ node: ParsedO
+..                                       .. rgNode) {
+39             result.merge(child.desce  39             if result[node.id] == ni
+.. ndantsByID) { current, _ in current   .. l { result[node.id] = node }
+.. }                                     .. 
+..                                       40             for child in node.childr
+..                                       .. en { collect(child) }
+40         }                             41         }
+..                                       42         collect(self)
+41         return result                 43         return result
+42     }                                 44     }
+43 }                                     45 }
+
+Orgenda/Domain/Settings/SettingsConfigurationSupport.swift --- Swift
+1  1 import Foundation
+2  2 
+3  3 extension WorkspaceConfiguration {
+.  4     func updating(template: Template) -> WorkspaceConfiguration {
+.  5         var result = self
+.  6         if let index = result.capture.templates.firstIndex(where: { $0.id == template.id }) {
+.  7             result.capture.templates[index] = template
+.  8         } else {
+.  9             result.capture.templates.append(template)
+. 10         }
+. 11         return result
+. 12     }
+. 13 
+4 14     /// A workflow preset never changes paths, templates, reminder rules or history.
+5 15     func applyingClassicWorkflowPreset() -> WorkspaceConfiguration {
+
+Orgenda/Features/Settings/ConfigurationEditors.swift --- 1/8 --- Swift
+ 10  10     @State private var newToken: String
+ 11  11     @State private var error: String?
+ 12  12     @State private var isSaving = false
+ 13  ..     @State private var showsDiscardConfirmation = false
+ 14  13     private let originalKeyword: WorkspaceConfiguration.Keyword
+ 15  14 
+ 16  15     init(token: String?, terminal: Bool, configuration: WorkspaceConfiguration,
+
+Orgenda/Features/Settings/ConfigurationEditors.swift --- 2/8 --- Swift
+ 25     }                                 24     }
+ 26                                       25 
+ 27     var body: some View {             26     var body: some View {
+ ..                                       27         ConfigurationEditorForm(
+ ..                                       28             title: token ?? String(
+ ..                                       .. localized: "Add state"),
+ ..                                       29             cancelIdentifier: "conf
+ ..                                       .. iguration.cancelKeyword", saveIdent
+ ..                                       .. ifier: "configuration.keyword.done"
+ ..                                       .. ,
+ ..                                       30             hasChanges: hasChanges,
+ ..                                       ..  isSaving: isSaving, canSave: !reso
+ ..                                       .. lvedToken.isEmpty,
+ ..                                       31             error: $error, save: co
+ ..                                       .. nfirm
+ 28         NavigationStack {             32         ) {
+ 29             Form {                    33             Form {
+ 30                 if let error { Conf   34                 if let error { Conf
+ .. igurationEditorErrorSection(message   .. igurationEditorErrorSection(message
+ .. : error) }                            .. : error) }
+ 31                 Section {             35                 Section {
+
+Orgenda/Features/Settings/ConfigurationEditors.swift --- 3/8 --- Swift
+ 94  98                 }
+ 95  99                 .pickerStyle(.navigationLink)
+ 96 100             }
+ 97 ...             .disabled(isSaving)
+ 98 ...             .tint(OrgendaTheme.accentText)
+ 99 ...             .textInputAutocapitalization(.never)
+100 ...             .autocorrectionDisabled()
+101 ...             .navigationTitle(token ?? String(localized: "Add state"))
+102 ...             .navigationBarTitleDisplayMode(.inline)
+103 ...             .toolbar {
+104 ...                 ToolbarItem(placement: .cancellationAction) {
+105 ...                     Button("Cancel", role: .cancel, action: cancel)
+106 ...                         .disabled(isSaving)
+107 ...                         .accessibilityIdentifier("configuration.cancelKeyword")
+108 ...                 }
+109 ...                 ToolbarItem(placement: .confirmationAction) {
+110 ...                     Button(isSaving ? String(localized: "Saving…") : String(localized: "Save"), role: .confirm) {
+111 ...                         Task { await confirm() }
+112 ...                     }
+113 ...                         .disabled(isSaving || resolvedToken.isEmpty)
+114 ...                         .accessibilityIdentifier("configuration.keyword.done")
+115 ...                 }
+116 ...             }
+117 ...             .alert("Discard changes?", isPresented: $showsDiscardConfirmation) {
+118 ...                 Button("Discard Changes", role: .destructive) { dismiss() }
+119 ...                 Button("Keep editing", role: .cancel) { }
+120 ...             } message: {
+121 ...                 Text("Your changes have not been saved.")
+122 ...             }
+123 101         }
+124 ...         .interactiveDismissDisabled(hasChanges || isSaving)
+125 ...         .alert("Unable to save", item: $error) { _ in
+126 ...             Button("OK", role: .cancel) { error = nil }
+127 ...         } message: { message in
+128 ...             Text(message)
+129 ...             Text("Your changes are still here. Correct the problem and try saving again.")
+130 ...         }
+131 102     }
+132 103 
+133 104     private var hasChanges: Bool {
+134 105         keyword != originalKeyword || newToken != (token ?? "")
+135 106     }
+136 ... 
+137 ...     private func cancel() {
+138 ...         if hasChanges { showsDiscardConfirmation = true }
+139 ...         else { dismiss() }
+140 ...     }
+141 107 
+142 108     private var resolvedToken: String {
+143 109         token ?? newToken.trimmingCharacters(in: .whitespacesAndNewlines)
+
+Orgenda/Features/Settings/ConfigurationEditors.swift --- 4/8 --- Swift
+194 160     @State private var previewTemplate: WorkspaceConfiguration.Template?
+195 161     @State private var error: String?
+196 162     @State private var isSaving = false
+197 ...     @State private var showsDiscardConfirmation = false
+198 163     @State private var showsAdvancedOptions = false
+199 164 
+200 165     init(template: WorkspaceConfiguration.Template, store: WorkspaceStore,
+
+Orgenda/Features/Settings/ConfigurationEditors.swift --- 5/8 --- Swift
+209     }                                174     }
+210                                      175 
+211     var body: some View {            176     var body: some View {
+...                                      177         ConfigurationEditorForm(
+...                                      178             title: String(localized
+...                                      ... : "Capture template"),
+...                                      179             cancelIdentifier: "conf
+...                                      ... iguration.cancelTemplate", saveIden
+...                                      ... tifier: "configuration.template.don
+...                                      ... e",
+...                                      180             hasChanges: hasChanges,
+...                                      ...  isSaving: isSaving, error: $error,
+...                                      ...  save: confirm
+212         NavigationStack {            181         ) {
+213             Form {                   182             Form {
+214                 if let error { Conf  183                 if let error { Conf
+... igurationEditorErrorSection(message  ... igurationEditorErrorSection(message
+... : error) }                           ... : error) }
+215                 Section("Template d  184                 Section("Template d
+... etails") {                           ... etails") {
+
+Orgenda/Features/Settings/ConfigurationEditors.swift --- 6/8 --- Swift
+248                     }                217                     }
+249                 }                    218                 }
+250             }                        219             }
+251             .disabled(isSaving)      ... 
+252             .tint(OrgendaTheme.acce  ... 
+... ntText)                              ... 
+253             .textInputAutocapitaliz  ... 
+... ation(.never).autocorrectionDisable  ... 
+... d()                                  ... 
+254             .navigationTitle("Captu  ... 
+... re template")                        ... 
+255             .navigationBarTitleDisp  ... 
+... layMode(.inline)                     ... 
+256             .toolbar {               ... 
+257                 ToolbarItem(placeme  ... 
+... nt: .cancellationAction) {           ... 
+258                     Button("Cancel"  ... 
+... , role: .cancel, action: cancel)     ... 
+259                         .disabled(i  ... 
+... sSaving)                             ... 
+260                         .accessibil  ... 
+... ityIdentifier("configuration.cancel  ... 
+... Template")                           ... 
+261                 }                    ... 
+262                 ToolbarItem(placeme  ... 
+... nt: .confirmationAction) {           ... 
+263                     Button(isSaving  ... 
+...  ? String(localized: "Saving…") : S  ... 
+... tring(localized: "Save"), role: .co  ... 
+... nfirm) {                             ... 
+264                         Task { awai  ... 
+... t confirm() }                        ... 
+265                     }                ... 
+266                     .disabled(isSav  ... 
+... ing)                                 ... 
+267                     .accessibilityI  ... 
+... dentifier("configuration.template.d  ... 
+... one")                                ... 
+268                 }                    ... 
+269             }                        ... 
+270             .alert("Discard changes  ... 
+... ?", isPresented: $showsDiscardConfi  ... 
+... rmation) {                           ... 
+271                 Button("Discard Cha  ... 
+... nges", role: .destructive) { dismis  ... 
+... s() }                                ... 
+272                 Button("Keep editin  ... 
+... g", role: .cancel) { }               ... 
+273             } message: {             ... 
+274                 Text("Your changes   ... 
+... have not been saved.")               ... 
+275             }                        ... 
+276             .sheet(item: $previewTe  ... 
+... mplate) { candidate in               ... 
+277                 ConfiguredCaptureVi  ... 
+... ew(store: store, initialTemplate: c  ... 
+... andidate, previewOnly: true)         ... 
+278             }                        ... 
+279         }                            220         }
+280         .interactiveDismissDisabled  ... 
+... (hasChanges || isSaving)             ... 
+281         .alert("Unable to save", it  221         .sheet(item: $previewTempla
+... em: $error) { _ in                   ... te) { candidate in
+282             Button("OK", role: .can  222             ConfiguredCaptureView(s
+... cel) { error = nil }                 ... tore: store, initialTemplate: candi
+...                                      ... date, previewOnly: true)
+283         } message: { message in      223         }
+284             Text(message)            ... 
+285             Text("Your changes are   ... 
+... still here. Correct the problem and  ... 
+...  try saving again.")                 ... 
+286         }                            ... 
+287     }                                224     }
+288                                      225 
+289     private var destinationSection:  226     private var destinationSection:
+...  some View {                         ...  some View {
+
+Orgenda/Features/Settings/ConfigurationEditors.swift --- 7/8 --- Swift
+321         template != originalTemplat  258         template != originalTemplat
+... e || outline != originalTemplate.ta  ... e || outline != originalTemplate.ta
+... rget.outline.joined(separator: "\n"  ... rget.outline.joined(separator: "\n"
+... )                                    ... )
+322     }                                259     }
+323                                      ... 
+324     private func cancel() {          ... 
+325         if hasChanges { showsDiscar  ... 
+... dConfirmation = true }               ... 
+326         else { dismiss() }           ... 
+327     }                                ... 
+328                                      260 
+329     private func validateFields() -  261     private func validateFields() -
+... > Bool {                             ... > Bool {
+330         error = nil                  262         error = nil
+331         let value = resolvedTemplat  ... 
+... e                                    ... 
+332         var candidate = configurati  ... 
+... on                                   ... 
+333         if let index = candidate.ca  ... 
+... pture.templates.firstIndex(where: {  ... 
+...  $0.id == value.id }) {              ... 
+334             candidate.capture.templ  ... 
+... ates[index] = value                  ... 
+335         } else {                     ... 
+336             candidate.capture.templ  ... 
+... ates.append(value)                   ... 
+337         }                            ... 
+338         do {                         263         do {
+339             try candidate.validate(  264             try configuration.updat
+... )                                    ... ing(template: resolvedTemplate).val
+...                                      ... idate()
+340             return true              265             return true
+341         } catch {                    266         } catch {
+342             self.error = error.loca  267             self.error = error.loca
+... lizedDescription                     ... lizedDescription
+
+Orgenda/Features/Settings/ConfigurationEditors.swift --- 8/8 --- Swift
+368 293     }
+369 294 }
+... 295 
+... 296 private struct ConfigurationEditorForm<Content: View>: View {
+... 297     @Environment(\.dismiss) private var dismiss
+... 298     let title: String
+... 299     let cancelIdentifier: String
+... 300     let saveIdentifier: String
+... 301     let hasChanges: Bool
+... 302     let isSaving: Bool
+... 303     var canSave = true
+... 304     @Binding var error: String?
+... 305     let save: () async -> Void
+... 306     @ViewBuilder let content: () -> Content
+... 307     @State private var showsDiscardConfirmation = false
+... 308 
+... 309     var body: some View {
+... 310         NavigationStack {
+... 311             content()
+... 312                 .disabled(isSaving)
+... 313                 .tint(OrgendaTheme.accentText)
+... 314                 .textInputAutocapitalization(.never)
+... 315                 .autocorrectionDisabled()
+... 316                 .navigationTitle(title)
+... 317                 .navigationBarTitleDisplayMode(.inline)
+... 318                 .toolbar {
+... 319                     ToolbarItem(placement: .cancellationAction) {
+... 320                         Button("Cancel", role: .cancel) {
+... 321                             if hasChanges { showsDiscardConfirmation = true }
+... 322                             else { dismiss() }
+... 323                         }
+... 324                         .disabled(isSaving)
+... 325                         .accessibilityIdentifier(cancelIdentifier)
+... 326                     }
+... 327                     ToolbarItem(placement: .confirmationAction) {
+... 328                         Button(isSaving ? String(localized: "Saving…") : String(localized: "Save"), role: .confirm) {
+... 329                             Task { await save() }
+... 330                         }
+... 331                         .disabled(isSaving || !canSave)
+... 332                         .accessibilityIdentifier(saveIdentifier)
+... 333                     }
+... 334                 }
+... 335                 .alert("Discard changes?", isPresented: $showsDiscardConfirmation) {
+... 336                     Button("Discard Changes", role: .destructive) { dismiss() }
+... 337                     Button("Keep editing", role: .cancel) { }
+... 338                 } message: {
+... 339                     Text("Your changes have not been saved.")
+... 340                 }
+... 341         }
+... 342         .interactiveDismissDisabled(hasChanges || isSaving)
+... 343         .alert("Unable to save", item: $error) { _ in
+... 344             Button("OK", role: .cancel) { error = nil }
+... 345         } message: { message in
+... 346             Text(message)
+... 347             Text("Your changes are still here. Correct the problem and try saving again.")
+... 348         }
+... 349     }
+... 350 }
+370 351 
+371 352 private struct ConfigurationEditorErrorSection: View {
+372 353     let message: String
+
+Orgenda/Features/Settings/ConfigurationSettingsView.swift --- Swift
+84             switch destination {      84             switch destination {
+85             case .template(let templ  85             case .template(let templ
+.. ate):                                 .. ate):
+86                 ConfigurationTemplat  86                 ConfigurationTemplat
+.. eEditor(template: template, store: s  .. eEditor(template: template, store: s
+.. tore, configuration: draft) { value   .. tore, configuration: draft) { value 
+.. in                                    .. in
+87                     var next = draft  .. 
+88                     if let index = n  87                     try await persis
+.. ext.capture.templates.firstIndex(whe  .. t(draft.updating(template: value))
+.. re: { $0.id == value.id }) { next.ca  .. 
+.. pture.templates[index] = value }      .. 
+89                     else { next.capt  .. 
+.. ure.templates.append(value) }         .. 
+90                     try await persis  .. 
+.. t(next)                               .. 
+91                 }                     88                 }
+92             case .keyword(let origin  89             case .keyword(let origin
+.. alToken, let terminal):               .. alToken, let terminal):
+93                 ConfigurationKeyword  90                 ConfigurationKeyword
+.. Editor(token: originalToken, termina  .. Editor(token: originalToken, termina
+.. l: terminal, configuration: draft) {  .. l: terminal, configuration: draft) {
+..  token, keyword in                    ..  token, keyword in
+
+Orgenda/Services/Storage/LocalStore+FileOperations.swift --- 1/7 --- Text (22 Swift parse errors, exceeded DFT_PARSE_ERROR_LIMIT, first at 182:8)
+220         // Files and WebDAV identif  220         // Files and WebDAV identif
+... y entries by path. Match the known   ... y entries by path. Match the known
+221         // textual subtree, and nev  221         // textual subtree, and nev
+... er issue another mutation for this   ... er issue another mutation for this 
+... outcome.                             ... outcome.
+222         for expected in operation.e  222         for expected in operation.e
+... xpected {                            ... xpected {
+223             let path = operation.de  223             let path = operation.de
+... stinationPath + expected.path.dropF  ... stinationPath(for: expected.path)
+... irst(operation.sourcePath.count)     ... 
+224             guard let current = sta  224             guard let current = sta
+... te.entries[path] else { return fals  ... te.entries[path] else { return fals
+... e }                                  ... e }
+225             if expected.kind == .fo  225             if expected.kind == .fo
+... lder {                               ... lder {
+226                 guard current.file.  226                 guard current.file.
+... isDirectory else { return false }    ... isDirectory else { return false }
+
+Orgenda/Services/Storage/LocalStore+FileOperations.swift --- 2/7 --- Text (22 Swift parse errors, exceeded DFT_PARSE_ERROR_LIMIT, first at 182:8)
+244                                      244 
+245     func applyAcknowledgedMove(_ op  245     func applyAcknowledgedMove(_ op
+... eration: WorkspaceOperation, result  ... eration: WorkspaceOperation, result
+... : RemoteFile, to next: inout Worksp  ... : RemoteFile, to next: inout Worksp
+... aceState) throws {                   ... aceState) throws {
+246         for expected in operation.e  246         for expected in operation.e
+... xpected {                            ... xpected {
+247             let path = operation.de  247             let path = operation.de
+... stinationPath + expected.path.dropF  ... stinationPath(for: expected.path)
+... irst(operation.sourcePath.count)     ... 
+248             if next.entries[path] =  248             if next.entries[path] =
+... = nil {                              ... = nil {
+249                 let blob = expected  249                 let blob = expected
+... .kind == .folder ? nil : try storeB  ... .kind == .folder ? nil : try storeB
+... lob(Data(expected.contents.utf8))    ... lob(Data(expected.contents.utf8))
+250                 let file = path ==   250                 let file = path == 
+... operation.destinationPath ? result   ... operation.destinationPath ? result 
+... : RemoteFile(id: path, path: path,   ... : RemoteFile(id: path, path: path,
+
+Orgenda/Services/Storage/LocalStore+FileOperations.swift --- 3/7 --- Text (22 Swift parse errors, exceeded DFT_PARSE_ERROR_LIMIT, first at 182:8)
+255         let moved = next.entries.fi  255         let moved = next.entries.fi
+... lter { WorkspaceFileTransfer.contai  ... lter { WorkspaceFileTransfer.contai
+... ns($0.key, in: operation.sourcePath  ... ns($0.key, in: operation.sourcePath
+... ) }                                  ... ) }
+256         for (oldPath, var entry) in  256         for (oldPath, var entry) in
+...  moved {                             ...  moved {
+257             next.entries.removeValu  257             next.entries.removeValu
+... e(forKey: oldPath)                   ... e(forKey: oldPath)
+258             let path = operation.de  258             let path = operation.de
+... stinationPath + oldPath.dropFirst(o  ... stinationPath(for: oldPath)
+... peration.sourcePath.count)           ... 
+259             if entry.file.id == old  259             if entry.file.id == old
+... Path { entry.file.id = path }        ... Path { entry.file.id = path }
+260             entry.file.path = path   260             entry.file.path = path
+261             if oldPath == operation  261             if oldPath == operation
+... .sourcePath { entry.file = result }  ... .sourcePath { entry.file = result }
+
+Orgenda/Services/Storage/LocalStore+FileOperations.swift --- 4/7 --- Text (22 Swift parse errors, exceeded DFT_PARSE_ERROR_LIMIT, first at 182:8)
+268         if operation.kind == .move   268         if operation.kind == .move 
+... {                                    ... {
+269             let drafts = next.pendi  269             let drafts = next.pendi
+... ng.filter { WorkspaceFileTransfer.c  ... ng.filter { WorkspaceFileTransfer.c
+... ontains($0.key, in: operation.sourc  ... ontains($0.key, in: operation.sourc
+... ePath) }                             ... ePath) }
+270             for (oldPath, var draft  270             for (oldPath, var draft
+... ) in drafts {                        ... ) in drafts {
+271                 let path = operatio  271                 let path = operatio
+... n.destinationPath + oldPath.dropFir  ... n.destinationPath(for: oldPath)
+... st(operation.sourcePath.count)       ... 
+272                 guard next.pending[  272                 guard next.pending[
+... path] == nil else { continue }       ... path] == nil else { continue }
+273                 next.pending.remove  273                 next.pending.remove
+... Value(forKey: oldPath)               ... Value(forKey: oldPath)
+274                 draft.fileID = next  274                 draft.fileID = next
+... .entries[path]?.fileID ?? draft.fil  ... .entries[path]?.fileID ?? draft.fil
+... eID                                  ... eID
+
+Orgenda/Services/Storage/LocalStore+FileOperations.swift --- 5/7 --- Text (22 Swift parse errors, exceeded DFT_PARSE_ERROR_LIMIT, first at 182:8)
+294         let cached = next.attachmen  294         let cached = next.attachmen
+... ts.filter { WorkspaceFileTransfer.c  ... ts.filter { WorkspaceFileTransfer.c
+... ontains($0.key, in: operation.sourc  ... ontains($0.key, in: operation.sourc
+... ePath) }                             ... ePath) }
+295         for (oldPath, var value) in  295         for (oldPath, var value) in
+...  cached {                            ...  cached {
+296             next.attachments.remove  296             next.attachments.remove
+... Value(forKey: oldPath)               ... Value(forKey: oldPath)
+297             let target = operation.  297             let target = operation.
+... destinationPath + oldPath.dropFirst  ... destinationPath(for: oldPath)
+... (operation.sourcePath.count)         ... 
+298             if value.remoteID == ol  298             if value.remoteID == ol
+... dPath { value.remoteID = target }    ... dPath { value.remoteID = target }
+299             next.attachments[target  299             next.attachments[target
+... ] = value                            ... ] = value
+300         }                            300         }
+
+Orgenda/Services/Storage/LocalStore+FileOperations.swift --- 6/7 --- Text (22 Swift parse errors, exceeded DFT_PARSE_ERROR_LIMIT, first at 182:8)
+374     private func hydrateRestoredDoc  374     private func hydrateRestoredDoc
+... uments(_ operation: WorkspaceOperat  ... uments(_ operation: WorkspaceOperat
+... ion, remote: any RemoteWorkspaceBac  ... ion, remote: any RemoteWorkspaceBac
+... kend) async throws {                 ... kend) async throws {
+375         var hydrated: [String: Work  375         var hydrated: [String: Work
+... spaceFileRecord] = [:]               ... spaceFileRecord] = [:]
+376         for (path, entry) in state.  376         for (path, entry) in state.
+... entries where WorkspaceFileTransfer  ... entries where WorkspaceFileTransfer
+... .contains(path, in: operation.sourc  ... .contains(path, in: operation.sourc
+... ePath) {                             ... ePath) {
+377             let restoredPath = oper  377             let restoredPath = oper
+... ation.destinationPath + path.dropFi  ... ation.destinationPath(for: path)
+... rst(operation.sourcePath.count)      ... 
+378             guard !entry.file.isDir  378             guard !entry.file.isDir
+... ectory, Self.isVisible(restoredPath  ... ectory, Self.isVisible(restoredPath
+... ), WorkspaceDocument.Kind(path: res  ... ), WorkspaceDocument.Kind(path: res
+... toredPath) != nil,                   ... toredPath) != nil,
+379                   entry.blob == nil  379                   entry.blob == nil
+...  || entry.file.revision == nil else  ...  || entry.file.revision == nil else
+...  { continue }                        ...  { continue }
+380             let result = try await   380             let result = try await 
+... remote.download(entry.file, maxByte  ... remote.download(entry.file, maxByte
+... s: textLimit)                        ... s: textLimit)
+
+Orgenda/Services/Storage/LocalStore+FileOperations.swift --- 7/7 --- Text (22 Swift parse errors, exceeded DFT_PARSE_ERROR_LIMIT, first at 182:8)
+404                 remoteModifiedAt: n  404                 remoteModifiedAt: n
+... ext.entries[path]?.file.modifiedAt,  ... ext.entries[path]?.file.modifiedAt,
+...  isOperation: true)                  ...  isOperation: true)
+405         }                            405         }
+406         for document in operation.e  406         for document in operation.e
+... xpected where document.kind != .fol  ... xpected where document.kind != .fol
+... der {                                ... der {
+407             let path = operation.ki  407             let path = operation.ki
+... nd == .trash ? document.path : oper  ... nd == .trash ? document.path : oper
+... ation.destinationPath + document.pa  ... ation.destinationPath(for: document
+... th.dropFirst(operation.sourcePath.c  ... .path)
+... ount)                                ... 
+408             let blob = try next.pen  408             let blob = try next.pen
+... ding[document.path]?.blob ?? storeB  ... ding[document.path]?.blob ?? storeB
+... lob(Data(document.contents.utf8))    ... lob(Data(document.contents.utf8))
+409             let contents = try text  409             let contents = try text
+... (blob)                               ... (blob)
+410             if document.path != pat  410             if document.path != pat
+... h {                                  ... h {
+
+Orgenda/Services/Storage/LocalStore+Sync.swift --- 1/3 --- Text (40 Swift parse errors, exceeded DFT_PARSE_ERROR_LIMIT, first at 121:8)
+ 21                 try commit(next)      21                 try commit(next)
+ 22             }                         22             }
+ 23             isPerformingFileOperati   23             isPerformingFileOperati
+ .. on = true                             .. on = true
+ 24             do { try await finishFi   24             defer { isPerformingFil
+ .. leOperation(); isPerformingFileOper   .. eOperation = false }
+ .. ation = false }                       .. 
+ 25             catch { isPerformingFil   25             try await finishFileOpe
+ .. eOperation = false; throw error }     .. ration()
+ 26         }                             26         }
+ 27         _ = try await pushPending()   27         _ = try await pushPending()
+ 28         if let path = sourceErrors.   28         if let path = sourceErrors.
+ .. keys.sorted().first { throw Storage   .. keys.sorted().first { throw Storage
+ .. Error.configuration(path + ": " + (   .. Error.configuration(path + ": " + (
+ .. sourceErrors[path] ?? "")) }          .. sourceErrors[path] ?? "")) }
+
+Orgenda/Services/Storage/LocalStore+Sync.swift --- 2/3 --- Text (40 Swift parse errors, exceeded DFT_PARSE_ERROR_LIMIT, first at 121:8)
+187         let operations = state.oper  187         let operations = state.oper
+... ations                               ... ations
+188         for operation in operations  188         for operation in operations
+...  where staged[operation.sourcePath]  ...  where staged[operation.sourcePath]
+...  == nil {                            ...  == nil {
+189             for expected in operati  189             for expected in operati
+... on.expected where expected.kind !=   ... on.expected where expected.kind != 
+... .folder {                            ... .folder {
+190                 let path = operatio  190                 let path = operatio
+... n.destinationPath + expected.path.d  ... n.destinationPath(for: expected.pat
+... ropFirst(operation.sourcePath.count  ... h)
+... )                                    ... 
+191                 guard let observed   191                 guard let observed 
+... = staged[path], observed.blob == ni  ... = staged[path], observed.blob == ni
+... l else { continue }                  ... l else { continue }
+192                 let bytes: Data      192                 let bytes: Data
+193                 switch source {      193                 switch source {
+
+Orgenda/Services/Storage/LocalStore+Sync.swift --- 3/3 --- Text (40 Swift parse errors, exceeded DFT_PARSE_ERROR_LIMIT, first at 121:8)
+266             var completed = next.en  266             var completed = next.en
+... tries[operation.sourcePath] == nil   ... tries[operation.sourcePath] == nil 
+... && !operation.expected.isEmpty       ... && !operation.expected.isEmpty
+267             if completed {           267             if completed {
+268                 for expected in ope  268                 for expected in ope
+... ration.expected {                    ... ration.expected {
+269                     let path = oper  269                     let path = oper
+... ation.destinationPath + expected.pa  ... ation.destinationPath(for: expected
+... th.dropFirst(operation.sourcePath.c  ... .path)
+... ount)                                ... 
+270                     guard let obser  270                     guard let obser
+... ved = next.entries[path] else { com  ... ved = next.entries[path] else { com
+... pleted = false; break }              ... pleted = false; break }
+271                     if expected.kin  271                     if expected.kin
+... d == .folder {                       ... d == .folder {
+272                         if !observe  272                         if !observe
+... d.file.isDirectory { completed = fa  ... d.file.isDirectory { completed = fa
+... lse; break }                         ... lse; break }
+
+Orgenda/Services/Storage/LocalStore.swift --- 1/2 --- Swift
+388         var result = path            388         var result = path
+389         for operation in state.oper  389         for operation in state.oper
+... ations {                             ... ations {
+390             if WorkspaceFileTransfe  390             if WorkspaceFileTransfe
+... r.contains(result, in: operation.so  ... r.contains(result, in: operation.so
+... urcePath) {                          ... urcePath) {
+391                 result = operation.  391                 result = operation.
+... destinationPath + result.dropFirst(  ... destinationPath(for: result)
+... operation.sourcePath.count)          ... 
+392             }                        392             }
+393         }                            393         }
+394         return result                394         return result
+
+Orgenda/Services/Storage/LocalStore.swift --- 2/2 --- Swift
+422             let moved = result.filt  422             let moved = result.filt
+... er { WorkspaceFileTransfer.contains  ... er { WorkspaceFileTransfer.contains
+... ($0.key, in: operation.sourcePath)   ... ($0.key, in: operation.sourcePath) 
+... }                                    ... }
+423             for (path, record) in m  423             for (path, record) in m
+... oved {                               ... oved {
+424                 result.removeValue(  424                 result.removeValue(
+... forKey: path)                        ... forKey: path)
+425                 result[operation.de  425                 result[operation.de
+... stinationPath + path.dropFirst(oper  ... stinationPath(for: path)] = record
+... ation.sourcePath.count)] = record    ... 
+426             }                        426             }
+427         }                            427         }
+428         for (path, pending) in stat  428         for (path, pending) in stat
+... e.pending where pending.requiresRes  ... e.pending where pending.requiresRes
+... olution {                            ... olution {
+
+Orgenda/Services/Storage/WorkspaceState.swift --- Swift
+51 51     var id = UUID()
+52 52     var sequence: UInt64 = 0
+.. 53 
+.. 54     /// Translate a path already known to belong to this operation's source subtree.
+.. 55     func destinationPath(for path: String) -> String {
+.. 56         destinationPath + path.dropFirst(sourcePath.count)
+.. 57     }
+53 58 }
+
+Orgenda/Services/Workspace/WorkspaceStore+Configuration.swift --- 1/3 --- Swift
+  2                                        2 
+  3 extension WorkspaceStore {             3 extension WorkspaceStore {
+  4     func workflow(for path: String)    4     func workflow(for path: String)
+  .  -> WorkspaceConfiguration.Workflow    .  -> WorkspaceConfiguration.Workflow
+  .  {                                     .  {
+  5         OrgConfiguredHeading.workfl    5         OrgConfiguredHeading.workfl
+  . ow(in: documents.first { $0.path ==    . ow(in: documentsByPath[path]?.conte
+  .  path }?.contents ?? "",               . nts ?? "",
+  6                                        6                                    
+  .    base: configuration.workflow)       .    base: configuration.workflow)
+  7     }                                  7     }
+  8                                        8 
+
+Orgenda/Services/Workspace/WorkspaceStore+Configuration.swift --- 2/3 --- Swift
+ 83                                       83 
+ 84     func capture(_ template: Worksp   84     func capture(_ template: Worksp
+ .. aceConfiguration.Template, rendered   .. aceConfiguration.Template, rendered
+ .. : String, date: Date,                 .. : String, date: Date,
+ 85                  createMissing: Boo   85                  createMissing: Boo
+ .. l, expectedContents: String?) -> Bo   .. l, expectedContents: String?) -> Bo
+ .. ol {                                  .. ol {
+ 86         let current = documents.fir   86         let current = documentsByPa
+ .. st { $0.path == template.target.pat   .. th[template.target.path]
+ .. h }                                   .. 
+ 87         guard current.map({ Data($0   87         guard current.map({ Data($0
+ .. .contents.utf8) }) == expectedConte   .. .contents.utf8) }) == expectedConte
+ .. nts.map({ Data($0.utf8) }) else {     .. nts.map({ Data($0.utf8) }) else {
+ 88             operationError = "The c   88             operationError = "The c
+ .. apture destination changed. Preview   .. apture destination changed. Preview
+ ..  the template again."                 ..  the template again."
+ 89             return false              89             return false
+
+Orgenda/Services/Workspace/WorkspaceStore+Configuration.swift --- 3/3 --- Swift
+ 93             validation.capture.temp   93             validation.capture.temp
+ .. lates = [template]                    .. lates = [template]
+ 94             validation.capture.defa   94             validation.capture.defa
+ .. ultTemplate = template.id             .. ultTemplate = template.id
+ 95             try validation.validate   95             try validation.validate
+ .. ()                                    .. ()
+ 96             var document = current    96             let document = current 
+ .. ?? WorkspaceDocument(path: template   .. ?? WorkspaceDocument(path: template
+ .. .target.path, title: (template.targ   .. .target.path, title: (template.targ
+ .. et.path as NSString).lastPathCompon   .. et.path as NSString).lastPathCompon
+ .. ent,                                  .. ent,
+ 97                                       97                                    
+ ..                     contents: "", k   ..                     contents: "", k
+ .. ind: .org)                            .. ind: .org)
+ 98             let parsed = OrgIndexSe   98             let parsed = OrgIndexSe
+ .. rvice.parseSynchronously([document]   .. rvice.parseSynchronously([document]
+ .. , configuration: configuration)[0]    .. , configuration: configuration)[0]
+ 99             document.contents = try   99             let contents = try Conf
+ ..  ConfiguredCapture.inserting(render   .. iguredCapture.inserting(rendered, t
+ .. ed, template: template, into: docum   .. emplate: template, into: document.c
+ .. ent.contents,                         .. ontents,
+100                                      100                                    
+...                             parsed:  ...                             parsed:
+...  parsed, date: date, createMissing:  ...  parsed, date: date, createMissing:
+...  createMissing)                      ...  createMissing)
+101             if let index = document  101             setDocument(document, c
+... s.firstIndex(where: { $0.path == do  ... ontents: contents)
+... cument.path }) { documents[index] =  ... 
+...  document }                          ... 
+102             else { documents.append  ... 
+... (document) }                         ... 
+103             scheduleWorkspaceRefres  102             scheduleWorkspaceRefres
+... h(changedPaths: [document.path])     ... h(changedPaths: [document.path])
+104             operationError = nil     103             operationError = nil
+105             return true              104             return true
+
+Orgenda/Services/Workspace/WorkspaceStore+Editing.swift --- 1/15 --- Swift
+ 33             return false              33             return false
+ 34         }                             34         }
+ 35         guard original.source.file    35         guard original.source.file 
+ .. == item.source.file,                  .. == item.source.file,
+ 36               let documentIndex = d   36               let document = docume
+ .. ocuments.firstIndex(where: { $0.pat   .. ntsByPath[original.source.file],
+ .. h == original.source.file }),         .. 
+ 37               let resolved = resolv   37               let resolved = resolv
+ .. edHeading(for: original),             .. edHeading(for: original),
+ 38               baseline == nil || ma   38               baseline == nil || ma
+ .. tchesSourceValues(original, heading   .. tchesSourceValues(original, heading
+ .. : resolved.heading),                  .. : resolved.heading),
+ 39               let edits = OrgSource   39               let edits = OrgSource
+ .. Mutation.itemEdits(                   .. Mutation.itemEdits(
+
+Orgenda/Services/Workspace/WorkspaceStore+Editing.swift --- 2/15 --- Swift
+ 42               )                       42               )
+ 43         else { return false }         43         else { return false }
+ 44                                       44 
+ 45         var contents = documents[do   45         var contents = document.con
+ .. cumentIndex].contents                 .. tents
+ 46         for edit in edits {           46         for edit in edits {
+ 47             guard let updated = try   47             guard let updated = try
+ .. ? edit.applied(to: contents) else {   .. ? edit.applied(to: contents) else {
+ ..  return false }                       ..  return false }
+ 48             contents = updated        48             contents = updated
+
+Orgenda/Services/Workspace/WorkspaceStore+Editing.swift --- 3/15 --- Swift
+ 53             contents = try OrgWorkf   53             contents = try OrgWorkf
+ .. lowOperations.applyingLogs(to: cont   .. lowOperations.applyingLogs(to: cont
+ .. ents,                                 .. ents,
+ 54                 headingStartByte: r   54                 headingStartByte: r
+ .. esolved.heading.source.startByte,     .. esolved.heading.source.startByte,
+ 55                 replacing: original   55                 replacing: original
+ .. , with: item, note: stateNote, now:   .. , with: item, note: stateNote, now:
+ ..  .now,                                ..  .now,
+ 56                 originalSource: doc   56                 originalSource: doc
+ .. uments[documentIndex].contents,       .. ument.contents,
+ 57                 logging: configurat   57                 logging: configurat
+ .. ion.logging)                          .. ion.logging)
+ 58             logInsertionDelta = con   58             logInsertionDelta = con
+ .. tents.utf8.count - priorCount         .. tents.utf8.count - priorCount
+ 59         } catch {                     59         } catch {
+
+Orgenda/Services/Workspace/WorkspaceStore+Editing.swift --- 4/15 --- Swift
+ 87             }                         87             }
+ 88         }                             88         }
+ 89         items = nextItems             89         items = nextItems
+ 90         documents[documentIndex].co   90         setDocument(document, conte
+ .. ntents = contents                     .. nts: contents)
+ 91         operationError = nil          91         operationError = nil
+ 92         scheduleWorkspaceRefresh(ch   92         scheduleWorkspaceRefresh(ch
+ .. angedPaths: [original.source.file])   .. angedPaths: [original.source.file])
+ 93         return true                   93         return true
+
+Orgenda/Services/Workspace/WorkspaceStore+Editing.swift --- 5/15 --- Swift
+158     /// atomically without adding T  158     /// atomically without adding T
+... ODO/DONE, CLOSED, or inferred kind   ... ODO/DONE, CLOSED, or inferred kind 
+... tags.                                ... tags.
+159     private func completeRepeatingE  159     private func completeRepeatingE
+... vent(_ original: OrgItem, nextDate:  ... vent(_ original: OrgItem, nextDate:
+...  Date) {                             ...  Date) {
+160         guard let itemIndex = items  160         guard let itemIndex = items
+... .firstIndex(where: { $0.id == origi  ... .firstIndex(where: { $0.id == origi
+... nal.id }),                           ... nal.id }),
+161               let documentIndex = d  161               let document = docume
+... ocuments.firstIndex(where: { $0.pat  ... ntsByPath[original.source.file],
+... h == original.source.file }),        ... 
+162               let resolved = resolv  162               let resolved = resolv
+... edHeading(for: original),            ... edHeading(for: original),
+163               matchesSourceValues(o  163               matchesSourceValues(o
+... riginal, heading: resolved.heading)  ... riginal, heading: resolved.heading)
+...  else {                              ...  else {
+164             operationError = String  164             operationError = String
+... (localized: "The event changed. Reo  ... (localized: "The event changed. Reo
+... pen it before completing this occur  ... pen it before completing this occur
+... rence.")                             ... rence.")
+
+Orgenda/Services/Workspace/WorkspaceStore+Editing.swift --- 6/15 --- Swift
+172             operationError = String  172             operationError = String
+... (localized: "The event metadata is   ... (localized: "The event metadata is 
+... ambiguous. Check its properties bef  ... ambiguous. Check its properties bef
+... ore completing it.")                 ... ore completing it.")
+173             return                   173             return
+174         }                            174         }
+175         var contents = documents[do  175         var contents = document.con
+... cumentIndex].contents                ... tents
+176         do {                         176         do {
+177             for edit in edits { con  177             for edit in edits { con
+... tents = try edit.applied(to: conten  ... tents = try edit.applied(to: conten
+... ts) }                                ... ts) }
+178         } catch {                    178         } catch {
+
+Orgenda/Services/Workspace/WorkspaceStore+Editing.swift --- 7/15 --- Swift
+184         nextItems[itemIndex].source  184         nextItems[itemIndex].source
+...  = resolved.heading.source           ...  = resolved.heading.source
+185         rebaseItemSources(&nextItem  185         rebaseItemSources(&nextItem
+... s, in: original.source.file, throug  ... s, in: original.source.file, throug
+... h: edits, contents: contents)        ... h: edits, contents: contents)
+186         items = nextItems            186         items = nextItems
+187         documents[documentIndex].co  187         setDocument(document, conte
+... ntents = contents                    ... nts: contents)
+188         scheduleWorkspaceRefresh(ch  188         scheduleWorkspaceRefresh(ch
+... angedPaths: [original.source.file])  ... angedPaths: [original.source.file])
+189     }                                189     }
+190                                      190 
+
+Orgenda/Services/Workspace/WorkspaceStore+Editing.swift --- 8/15 --- Swift
+201                                      201 
+202     func addJournalEntry(title: Str  202     func addJournalEntry(title: Str
+... ing, body: String, date: Date) {     ... ing, body: String, date: Date) {
+203         let path = "\(configuration  203         let path = "\(configuration
+... .files.journal)/\(Calendar.autoupda  ... .files.journal)/\(Calendar.autoupda
+... tingCurrent.component(.year, from:   ... tingCurrent.component(.year, from: 
+... date)).org"                          ... date)).org"
+204         let index: Int               ... 
+205         if let existing = documents  204         let document = documentsByP
+... .firstIndex(where: { $0.path == pat  ... ath[path] ?? WorkspaceDocument(
+... h }) {                               ... 
+206             index = existing         ... 
+207         } else {                     ... 
+208             index = documents.endIn  ... 
+... dex                                  ... 
+209             documents.append(Worksp  205             path: path, title: URL(
+... aceDocument(path: path, title: URL(  ... fileURLWithPath: path).lastPathComp
+... fileURLWithPath: path).lastPathComp  ... onent, contents: "", kind: .org
+... onent, contents: "", kind: .org))    ... 
+210         }                            206         )
+211         let time = date.formatted(.  207         let time = date.formatted(.
+... verbatim(                            ... verbatim(
+212             "\(hour: .twoDigits(clo  208             "\(hour: .twoDigits(clo
+... ck: .twentyFourHour, hourCycle: .ze  ... ck: .twentyFourHour, hourCycle: .ze
+... roBased)):\(minute: .twoDigits)",    ... roBased)):\(minute: .twoDigits)",
+213             locale: Locale(identifi  209             locale: Locale(identifi
+... er: "en_US_POSIX"), timeZone: .auto  ... er: "en_US_POSIX"), timeZone: .auto
+... updatingCurrent,                     ... updatingCurrent,
+214             calendar: Calendar(iden  210             calendar: Calendar(iden
+... tifier: .gregorian)                  ... tifier: .gregorian)
+215         ))                           211         ))
+216         let source = "* \(date.orgD  212         let source = "* \(date.orgD
+... ateText(includesTime: false))\n** \  ... ateText(includesTime: false))\n** \
+... (time) \(title)\n\(body)"            ... (time) \(title)\n\(body)"
+217         let separator = documents[i  213         let separator = document.co
+... ndex].contents.isEmpty ? "" : "\n\n  ... ntents.isEmpty ? "" : "\n\n"
+... "                                    ... 
+218         let prefix = documents[inde  214         let prefix = document.conte
+... x].contents + separator              ... nts + separator
+219         let entry = JournalEntry(    215         let entry = JournalEntry(
+220             id: UUID(),              216             id: UUID(),
+221             date: date,              217             date: date,
+
+Orgenda/Services/Workspace/WorkspaceStore+Editing.swift --- 9/15 --- Swift
+228                 startLine: prefix.u  224                 startLine: prefix.u
+... tf8.filter { $0 == 10 }.count + 1    ... tf8.filter { $0 == 10 }.count + 1
+229             )                        225             )
+230         )                            226         )
+231         documents[index].contents =  227         setDocument(document, conte
+...  prefix + source                     ... nts: prefix + source)
+232         journalEntries.append(entry  228         journalEntries.append(entry
+... )                                    ... )
+233         scheduleWorkspaceRefresh(ch  229         scheduleWorkspaceRefresh(ch
+... angedPaths: [path])                  ... angedPaths: [path])
+234     }                                230     }
+235                                      231 
+236     func updateDocument(path: Strin  232     func updateDocument(path: Strin
+... g, contents: String) {               ... g, contents: String) {
+237         var document: WorkspaceDocu  233         let document: WorkspaceDocu
+... ment                                 ... ment
+238         if let existing = documents  234         if let existing = documents
+... ByPath[path] { document = existing   ... ByPath[path] { document = existing 
+... }                                    ... }
+239         else if let baseline = reti  235         else if let baseline = reti
+... redBlobs[path], let kind = Workspac  ... redBlobs[path], let kind = Workspac
+... eDocument.Kind(path: path) {         ... eDocument.Kind(path: path) {
+240             document = WorkspaceDoc  236             document = WorkspaceDoc
+... ument(path: path, title: (path as N  ... ument(path: path, title: (path as N
+... SString).lastPathComponent, content  ... SString).lastPathComponent, content
+... s: "", kind: kind)                   ... s: "", kind: kind)
+241             persistedBlobs[path] =   237             persistedBlobs[path] = 
+... baseline                             ... baseline
+242         } else { return }            238         } else { return }
+243         guard !document.contents.ut  239         guard !document.contents.ut
+... f8.elementsEqual(contents.utf8) els  ... f8.elementsEqual(contents.utf8) els
+... e { return }                         ... e { return }
+244         document.contents = content  240         setDocument(document, conte
+... s                                    ... nts: contents)
+245         documentsByPath[path] = doc  ... 
+... ument                                ... 
+246         storageContentGeneration &+  ... 
+... = 1                                  ... 
+247         scheduleWorkspaceRefresh(ch  241         scheduleWorkspaceRefresh(ch
+... angedPaths: [path], debounce: .mill  ... angedPaths: [path], debounce: .mill
+... iseconds(400))                       ... iseconds(400))
+248     }                                242     }
+249                                      243 
+
+Orgenda/Services/Workspace/WorkspaceStore+Editing.swift --- 10/15 --- Swift
+259         placement: OrgHeadingPlacem  253         placement: OrgHeadingPlacem
+... ent                                  ... ent
+260     ) -> OrgHeadingMove? {           254     ) -> OrgHeadingMove? {
+261         operationError = nil         255         operationError = nil
+262         guard let index = documents  256         guard let source = document
+... .firstIndex(where: { $0.path == doc  ... sByPath[document.path],
+... ument.path }),                       ... 
+263               documents[index].cont  257               source.contents.utf8.
+... ents.utf8.elementsEqual(document.ro  ... elementsEqual(document.root.text.ut
+... ot.text.utf8) else {                 ... f8) else {
+264             operationError = String  258             operationError = String
+... (localized: "The document changed w  ... (localized: "The document changed w
+... hile dragging. Try moving the headi  ... hile dragging. Try moving the headi
+... ng again.")                          ... ng again.")
+265             return nil               259             return nil
+266         }                            260         }
+267         guard let move = OrgHeading  261         guard let move = OrgHeading
+... Move.plan(in: document, headingID:   ... Move.plan(in: document, headingID: 
+... headingID,                           ... headingID,
+268                                      262                                    
+...           targetID: targetID, place  ...           targetID: targetID, place
+... ment: placement),                    ... ment: placement),
+269               let contents = try? m  263               let contents = try? m
+... ove.mutation.applied(to: documents[  ... ove.mutation.applied(to: source.con
+... index].contents) else { return nil   ... tents) else { return nil }
+... }                                    ... 
+270         Self.updateItemSources(&ite  264         Self.updateItemSources(&ite
+... ms, in: document.path, contents: co  ... ms, in: document.path, contents: co
+... ntents) { source in                  ... ntents) { source in
+271             source = move.relocated  265             source = move.relocated
+... Source(source)                       ... Source(source)
+272         }                            266         }
+273         documents[index].contents =  267         setDocument(source, content
+...  contents                            ... s: contents)
+274         scheduleWorkspaceRefresh(ch  268         scheduleWorkspaceRefresh(ch
+... angedPaths: [document.path])         ... angedPaths: [document.path])
+275         return move                  269         return move
+276     }                                270     }
+277                                      271 
+278     @discardableResult               272     @discardableResult
+279     func applyPlanningDraft(path: S  273     func applyPlanningDraft(path: S
+... tring, node: ParsedOrgNode, draft:   ... tring, node: ParsedOrgNode, draft: 
+... OrgPlanningEntryDraft) -> Bool {     ... OrgPlanningEntryDraft) -> Bool {
+280         guard let index = documents  274         guard let document = docume
+... .firstIndex(where: { $0.path == pat  ... ntsByPath[path] else { return false
+... h }) else { return false }           ...  }
+281         let source = documents[inde  275         let source = document.conte
+... x].contents                          ... nts
+282         guard source.utf8.dropFirst  276         guard source.utf8.dropFirst
+... (node.startByte).prefix(node.endByt  ... (node.startByte).prefix(node.endByt
+... e - node.startByte).elementsEqual(n  ... e - node.startByte).elementsEqual(n
+... ode.text.utf8),                      ... ode.text.utf8),
+283               let replacement = try  277               let replacement = try
+... ? OrgSourceMutation(startByte: node  ... ? OrgSourceMutation(startByte: node
+... .startByte, endByte: node.endByte,   ... .startByte, endByte: node.endByte,
+284                                      278                                    
+...                     replacement: dr  ...                     replacement: dr
+... aft.source).applied(to: source) els  ... aft.source).applied(to: source) els
+... e { return false }                   ... e { return false }
+285         var updated = replacement    279         var updated = replacement
+286         // Reuse the published inde  280         // Reuse the published inde
+... x when it still matches the source;  ... x when it still matches the source;
+...  only                                ...  only
+287         // the post-edit document m  281         // the post-edit document m
+... ust always be parsed here.           ... ust always be parsed here.
+288         let beforeDocument = parsed  282         let beforeDocument = parsed
+... Documents[path].flatMap { $0.root.t  ... Documents[path].flatMap { $0.root.t
+... ext.utf8.elementsEqual(source.utf8)  ... ext.utf8.elementsEqual(source.utf8)
+...  ? $0 : nil }                        ...  ? $0 : nil }
+289             ?? OrgIndexService.pars  283             ?? OrgIndexService.pars
+... eSynchronously([documents[index]],   ... eSynchronously([document], configur
+... configuration: configuration).first  ... ation: configuration).first
+290         var candidate = documents[i  284         var candidate = document; c
+... ndex]; candidate.contents = replace  ... andidate.contents = replacement
+... ment                                 ... 
+291         let afterDocument = OrgInde  285         let afterDocument = OrgInde
+... xService.parseSynchronously([candid  ... xService.parseSynchronously([candid
+... ate], configuration: configuration)  ... ate], configuration: configuration)
+... .first                               ... .first
+292         if let before = beforeDocum  286         if let before = beforeDocum
+... ent?.headings.last(where: { $0.sour  ... ent?.headings.last(where: { $0.sour
+... ce.startByte <= node.startByte }),   ... ce.startByte <= node.startByte }),
+293            let after = afterDocumen  287            let after = afterDocumen
+... t?.headings.first(where: { $0.sourc  ... t?.headings.first(where: { $0.sourc
+... e.startByte == before.source.startB  ... e.startByte == before.source.startB
+... yte }) {                             ... yte }) {
+
+Orgenda/Services/Workspace/WorkspaceStore+Editing.swift --- 11/15 --- Swift
+305                     originalSource:  299                     originalSource:
+...  source, logging: configuration.log  ...  source, logging: configuration.log
+... ging)                                ... ging)
+306             } catch { operationErro  300             } catch { operationErro
+... r = error.localizedDescription; ret  ... r = error.localizedDescription; ret
+... urn false }                          ... urn false }
+307         }                            301         }
+308         documents[index].contents =  302         setDocument(document, conte
+...  updated                             ... nts: updated)
+309         operationError = nil         303         operationError = nil
+310         scheduleWorkspaceRefresh(ch  304         scheduleWorkspaceRefresh(ch
+... angedPaths: [path])                  ... angedPaths: [path])
+311         return true                  305         return true
+
+Orgenda/Services/Workspace/WorkspaceStore+Editing.swift --- 12/15 --- Swift
+319         expectedText: String,        313         expectedText: String,
+320         replacement: String          314         replacement: String
+321     ) -> Bool {                      315     ) -> Bool {
+322         guard let index = documents  316         guard let document = docume
+... .firstIndex(where: { $0.path == pat  ... ntsByPath[path] else { return false
+... h }) else { return false }           ...  }
+323         let source = documents[inde  317         let source = document.conte
+... x].contents                          ... nts
+324         guard startByte >= 0,        318         guard startByte >= 0,
+325               endByte >= startByte,  319               endByte >= startByte,
+326               source.utf8            320               source.utf8
+
+Orgenda/Services/Workspace/WorkspaceStore+Editing.swift --- 13/15 --- Swift
+335             replacement: replacemen  329             replacement: replacemen
+... t                                    ... t
+336         )                            330         )
+337         guard let contents = try? m  331         guard let contents = try? m
+... utation.applied(to: source) else {   ... utation.applied(to: source) else { 
+... return false }                       ... return false }
+338         documents[index].contents =  332         setDocument(document, conte
+...  contents                            ... nts: contents)
+339         scheduleWorkspaceRefresh(ch  333         scheduleWorkspaceRefresh(ch
+... angedPaths: [path])                  ... angedPaths: [path])
+340         return true                  334         return true
+341     }                                335     }
+
+Orgenda/Services/Workspace/WorkspaceStore+Editing.swift --- 14/15 --- Swift
+436                                      430 
+437     private func appendItem(_ item:  431     private func appendItem(_ item:
+...  OrgItem) {                          ...  OrgItem) {
+438         let path = item.source.file  432         let path = item.source.file
+439         let index: Int               ... 
+440         if let existing = documents  433         let document = documentsByP
+... .firstIndex(where: { $0.path == pat  ... ath[path] ?? WorkspaceDocument(path
+... h }) {                               ... : path, title: path, contents: "", 
+...                                      ... kind: .org)
+441             index = existing         ... 
+442         } else {                     ... 
+443             index = documents.endIn  ... 
+... dex                                  ... 
+444             documents.append(Worksp  ... 
+... aceDocument(path: path, title: path  ... 
+... , contents: "", kind: .org))         ... 
+445         }                            ... 
+446         var lines = [item.orgHeadin  434         var lines = [item.orgHeadin
+... g]                                   ... g]
+447         if [.event, .note].contains  435         if [.event, .note].contains
+... (item.kind), !item.state.isTerminal  ... (item.kind), !item.state.isTerminal
+...  {                                   ...  {
+448             lines[0] = lines[0].rep  436             lines[0] = lines[0].rep
+... lacingOccurrences(of: "* \(item.sta  ... lacingOccurrences(of: "* \(item.sta
+... te.rawValue) ", with: "* ")          ... te.rawValue) ", with: "* ")
+
+Orgenda/Services/Workspace/WorkspaceStore+Editing.swift --- 15/15 --- Swift
+459         }                            447         }
+460         if !item.body.isEmpty { lin  448         if !item.body.isEmpty { lin
+... es.append(item.body) }               ... es.append(item.body) }
+461         let newSource = lines.joine  449         let newSource = lines.joine
+... d(separator: "\n")                   ... d(separator: "\n")
+462         let separator = documents[i  450         let separator = document.co
+... ndex].contents.isEmpty || documents  ... ntents.isEmpty || document.contents
+... [index].contents.hasSuffix("\n\n")   ... .hasSuffix("\n\n") ? "" : "\n\n"
+... ? "" : "\n\n"                        ... 
+463         let prefix = documents[inde  451         let prefix = document.conte
+... x].contents + separator              ... nts + separator
+464         var appended = item          452         var appended = item
+465         appended.source = SourceLoc  453         appended.source = SourceLoc
+... ation(                               ... ation(
+466             file: path, startByte:   454             file: path, startByte: 
+... prefix.utf8.count, endByte: prefix.  ... prefix.utf8.count, endByte: prefix.
+... utf8.count + newSource.utf8.count,   ... utf8.count + newSource.utf8.count,
+467             startLine: prefix.utf8.  455             startLine: prefix.utf8.
+... filter { $0 == 10 }.count + 1        ... filter { $0 == 10 }.count + 1
+468         )                            456         )
+469         documents[index].contents =  457         setDocument(document, conte
+...  prefix + newSource                  ... nts: prefix + newSource)
+470         items.append(appended)       458         items.append(appended)
+471         scheduleWorkspaceRefresh(ch  459         scheduleWorkspaceRefresh(ch
+... angedPaths: [path])                  ... angedPaths: [path])
+472     }                                460     }
+
+Orgenda/Services/Workspace/WorkspaceStore+Indexing.swift --- Swift
+ 98                                       98 
+ 99     func acceptDiskDocuments(_ load   99     func acceptDiskDocuments(_ load
+ .. ed: [WorkspaceDocument]) {            .. ed: [WorkspaceDocument]) {
+100         let incomingPaths = Set(loa  100         let incomingPaths = Set(loa
+... ded.map(\.path))                     ... ded.map(\.path))
+...                                      101         let previous = documentsByP
+...                                      ... ath
+101         let removed = Set(documents  102         let removed = Set(previous.
+... .map(\.path)).subtracting(incomingP  ... keys).subtracting(incomingPaths).su
+... aths).subtracting(dirtyFilePaths)    ... btracting(dirtyFilePaths)
+102         let previous = Dictionary(u  ... 
+... niqueKeysWithValues: documents.map   ... 
+... { ($0.path, $0) })                   ... 
+103         let changed = Set(loaded.fi  103         let changed = Set(loaded.fi
+... lter { document in                   ... lter { document in
+104             guard let old = previou  104             guard let old = previou
+... s[document.path] else { return true  ... s[document.path] else { return true
+...  }                                   ...  }
+105             return !old.contents.ut  105             return !old.contents.ut
+... f8.elementsEqual(document.contents.  ... f8.elementsEqual(document.contents.
+... utf8)                                ... utf8)
+106         }.map(\.path))               106         }.map(\.path))
+107         let pending = documents.fil  107         let pending = previous.valu
+... ter { dirtyFilePaths.contains($0.pa  ... es.filter { dirtyFilePaths.contains
+... th) }                                ... ($0.path) }
+108         let next = (loaded.filter {  108         let next = (loaded.filter {
+...  !dirtyFilePaths.contains($0.path)   ...  !dirtyFilePaths.contains($0.path) 
+... } + pending).sorted { $0.path < $1.  ... } + pending).sorted { $0.path < $1.
+... path }                               ... path }
+109         // Canonically equivalent S  109         // Canonically equivalent S
+... wift strings can have different UTF  ... wift strings can have different UTF
+... -8 byte                              ... -8 byte
+110         // ranges. Source-based edi  110         // ranges. Source-based edi
+... tors must accept and reindex those   ... tors must accept and reindex those 
+... changes.                             ... changes.
+
+Orgenda/Services/Workspace/WorkspaceStore+Queries.swift --- Swift
+ 98                                       98 
+ 99 extension WorkspaceStore {            99 extension WorkspaceStore {
+100     func saveStatus(for path: Strin  100     func saveStatus(for path: Strin
+... g) -> DocumentSaveStatus {           ... g) -> DocumentSaveStatus {
+101         guard documents.contains(wh  101         guard documentsByPath[path]
+... ere: { $0.path == path }) else { re  ...  != nil else { return .unavailable 
+... turn .unavailable }                  ... }
+102         guard isFolderConnected els  102         guard isFolderConnected els
+... e { return .unavailable }            ... e { return .unavailable }
+103         if let error = fileSaveErro  103         if let error = fileSaveErro
+... rs[path] ?? pathSyncErrors[path] {   ... rs[path] ?? pathSyncErrors[path] { 
+... return .failed(error) }              ... return .failed(error) }
+104         if dirtyFilePaths.contains(  104         if dirtyFilePaths.contains(
+... path) { return .saving }             ... path) { return .saving }
+
+Orgenda/Services/Workspace/WorkspaceStore.swift --- Swift
+120 120         self.documents = documents
+121 121     }
+... 122 
+... 123     func setDocument(_ document: WorkspaceDocument, contents: String) {
+... 124         var updated = document
+... 125         updated.contents = contents
+... 126         documentsByPath[document.path] = updated
+... 127         storageContentGeneration &+= 1
+... 128     }
+122 129 
+123 130     /// Rebuilds the materialized derived collections. Called from the `items`
+124 131     /// observer and configuration updates, so every mutation path (index
+

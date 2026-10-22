@@ -1,0 +1,1 @@
+-keep class com.roifewu.orgenda.core.NativeBridge { *; }
