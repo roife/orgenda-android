@@ -1,6 +1,8 @@
 # Orgenda Android
 
-0.1.3 延续对 iOS 108 个 UI 及界面支撑文件的行为对照，保留 Material 原生组件，补齐保存失败与重试、文件目录状态、源码撤销分组、日期选区、大纲连续性和跨日/时区刷新。138 项不同自动测试通过；具体差异见 [功能对齐补充](docs/FUNCTION_PARITY-0.1.3.md)，验证范围与安装包摘要见 [本轮验收](docs/ACCEPTANCE.md)。历史签名包与验收证据独立保留。
+Preview / Edit 的最新功能、间距、缩进和撤销行为调整见 [2026-10 对齐记录](docs/ui-parity-preview-edit-2026-10.md)。
+
+文件、任务和标题的滑动／拖放操作见 [组件手势](docs/ui-gestures.md)。
 
 Kotlin、Jetpack Compose、Material 3 原生 Android 客户端。最低 Android 14 / API 34，当前 target/compile SDK 36，支持 arm64-v8a 和 x86_64。界面遵循 Android 交互，文件和 config.json v1 与 iOS 工作区共享。
 
@@ -43,8 +45,7 @@ keyPassword=YOUR_PASSWORD
 
 ## 实现与验收
 
-- [108 个 iOS UI 文件的组件行为对照与 Material 适配](docs/UI_COMPONENTS.md)
-- [0.1.3 功能对齐与保留差异](docs/FUNCTION_PARITY-0.1.3.md)
+- [Material 3 界面与响应式布局](docs/material3-ui.md)
 - [223 个 iOS 文件逐项对照与修复](docs/parity/FILE_COMPARISON.md)
 - [架构与持久化边界](docs/ANDROID_ARCHITECTURE.md)
 - [验收记录与待验证项目](docs/ACCEPTANCE.md)
@@ -52,4 +53,4 @@ keyPassword=YOUR_PASSWORD
 - [iOS 未提交修改基线](docs/ios-baseline.json)
 - [往返兼容样例](compatibility/README.md)
 
-没有运行格式化工具，没有创建额外功能分支。本轮未修改 iOS 源码；`python3 scripts/update-parity-inventory.py` 校验本轮 223 文件及已记录的未提交修改。`verify-ios-baseline.py` 仅用于原 0.1.0 的历史工作区，不应拿它验证后续 iOS 开发。
+iOS 源码基线校验：`python3 scripts/update-parity-inventory.py` 校验本轮 223 文件及已记录的未提交修改。`verify-ios-baseline.py` 仅用于原 0.1.0 的历史工作区，不应拿它验证后续 iOS 开发。

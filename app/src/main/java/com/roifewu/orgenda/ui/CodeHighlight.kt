@@ -8,20 +8,35 @@ import io.noties.prism4j.Prism4j
 
 /** Native tokenization and native text spans; no WebView or script execution. */
 object CodeHighlight {
-    private val cache = object : LruCache<String, SpannableString>(16 * 1024 * 1024) {
-        override fun sizeOf(key: String, value: SpannableString) = key.length * 2 + value.length * 16
-    }
-    @Synchronized fun text(source: String, language: String, primary: Int, secondary: Int, tertiary: Int, comment: Int): SpannableString {
-        val key = "$language\u0000$primary:$secondary:$tertiary:$comment\u0000$source"
-        cache.get(key)?.let { return it }
-        val value = SpannableString(source)
-        val normalized = mapOf("elisp" to "clojure", "emacs-lisp" to "clojure", "lisp" to "clojure", "shell-script" to "bash", "sh" to "bash")[language.lowercase()] ?: language.lowercase()
-        fun color(type: String) = when (type) {
-            "comment", "prolog", "doctype" -> comment
-            "string", "char", "attr-value", "regex" -> tertiary
-            "number", "boolean", "constant", "symbol", "property" -> secondary
-            else -> primary
+    private val cache =
+        object : LruCache<String, SpannableString>(16 * 1024 * 1024) {
+            override fun sizeOf(key: String, value: SpannableString) =
+                key.length * 2 + value.length * 16
         }
+
+    @Synchronized
+    fun text(
+        source: String,
+        language: String,
+        primary: Int,
+        secondary: Int,
+        tertiary: Int,
+        comment: Int,
+    ): SpannableString {
+        val key = "$language\u0000$primary:$secondary:$tertiary:$comment\u0000$source"
+        cache.get(key)?.let {
+            return it
+        }
+        val value = SpannableString(source)
+        val normalized =
+            when (val name = language.lowercase()) {
+                "elisp",
+                "emacs-lisp",
+                "lisp" -> "clojure"
+                "shell-script",
+                "sh" -> "bash"
+                else -> name
+            }
         var offset = 0
         fun visit(nodes: List<Prism4j.Node>) {
             for (node in nodes) when (node) {
@@ -29,7 +44,29 @@ object CodeHighlight {
                 is Prism4j.Syntax -> {
                     val start = offset
                     visit(node.children())
-                    if (offset > start) value.setSpan(ForegroundColorSpan(color(node.type())), start, offset, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                    if (offset > start)
+                        value.setSpan(
+                            ForegroundColorSpan(
+                                when (node.type()) {
+                                    "comment",
+                                    "prolog",
+                                    "doctype" -> comment
+                                    "string",
+                                    "char",
+                                    "attr-value",
+                                    "regex" -> tertiary
+                                    "number",
+                                    "boolean",
+                                    "constant",
+                                    "symbol",
+                                    "property" -> secondary
+                                    else -> primary
+                                }
+                            ),
+                            start,
+                            offset,
+                            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+                        )
                 }
             }
         }
@@ -37,9 +74,23 @@ object CodeHighlight {
         if (grammar != null) runCatching { visit(CodeGrammars.PARSER.tokenize(source, grammar)) }
         else if (normalized == "bash") {
             // Shell comments and quoting differ from the C-family grammars.
-            Regex("""(?m)#[^\n]*$|"(?:[^"\\]|\\.)*"|'[^']*'|\$\{[^}]*\}|\$[A-Za-z_][A-Za-z0-9_]*|\b(?:if|then|else|elif|fi|for|while|do|done|case|esac|function|in)\b""").findAll(source).forEach { match ->
-                value.setSpan(ForegroundColorSpan(if (match.value.startsWith('#')) comment else if (match.value.startsWith('"') || match.value.startsWith('\'')) tertiary else primary), match.range.first, match.range.last + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-            }
+            Regex(
+                    """(?m)#[^\n]*$|"(?:[^"\\]|\\.)*"|'[^']*'|\$\{[^}]*\}|\$[A-Za-z_][A-Za-z0-9_]*|\b(?:if|then|else|elif|fi|for|while|do|done|case|esac|function|in)\b"""
+                )
+                .findAll(source)
+                .forEach { match ->
+                    value.setSpan(
+                        ForegroundColorSpan(
+                            if (match.value.startsWith('#')) comment
+                            else if (match.value.startsWith('"') || match.value.startsWith('\''))
+                                tertiary
+                            else primary
+                        ),
+                        match.range.first,
+                        match.range.last + 1,
+                        Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+                    )
+                }
         }
         cache.put(key, value)
         return value

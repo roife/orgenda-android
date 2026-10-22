@@ -15,6 +15,9 @@ import com.roifewu.orgenda.data.FileEntity
 import com.roifewu.orgenda.data.WorkspaceDatabase
 import com.roifewu.orgenda.data.WorkspaceEntity
 import com.roifewu.orgenda.data.WorkspaceRepository
+import java.io.File
+import java.util.UUID
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
@@ -32,9 +35,6 @@ import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
-import java.io.File
-import java.util.UUID
-import java.util.concurrent.TimeUnit
 
 @RunWith(AndroidJUnit4::class)
 class ConfigurationEditSafetyTest {
@@ -49,20 +49,29 @@ class ConfigurationEditSafetyTest {
     private val preferenceNames = mutableSetOf<String>()
     private val workspaceIds = mutableSetOf<String>()
 
-    @Before fun setup() = runBlocking {
+    @Before
+    fun setup() = runBlocking {
         realApp = ApplicationProvider.getApplicationContext()
         realApp.ready.await()
         val prefix = "configuration-edit-${UUID.randomUUID()}"
         root = File(realApp.cacheDir, prefix).apply { mkdirs() }
-        val isolated = object : ContextWrapper(realApp) {
-            override fun getApplicationContext(): Context = this
-            override fun getFilesDir() = root
-            override fun getSharedPreferences(name: String, mode: Int) =
-                realApp.getSharedPreferences("$prefix-$name".also { preferenceNames += it }, mode)
-        }
+        val isolated =
+            object : ContextWrapper(realApp) {
+                override fun getApplicationContext(): Context = this
+
+                override fun getFilesDir() = root
+
+                override fun getSharedPreferences(name: String, mode: Int) =
+                    realApp.getSharedPreferences(
+                        "$prefix-$name".also { preferenceNames += it },
+                        mode,
+                    )
+            }
         // A separate Application avoids replacing the QA process's repository or ready job.
         // onCreate is deliberately not called: no periodic sync or reminder collector is started.
-        app = Instrumentation.newApplication(OrgendaApplication::class.java, isolated) as OrgendaApplication
+        app =
+            Instrumentation.newApplication(OrgendaApplication::class.java, isolated)
+                as OrgendaApplication
         val database = Room.inMemoryDatabaseBuilder(isolated, WorkspaceDatabase::class.java).build()
         repository = WorkspaceRepository(isolated, database)
         repository.start()
@@ -79,27 +88,39 @@ class ConfigurationEditSafetyTest {
         Unit
     }
 
-    @After fun cleanup() = runBlocking {
+    @After
+    fun cleanup() = runBlocking {
         if (::models.isInitialized) withContext(Dispatchers.Main.immediate) { models.clear() }
         if (::realApp.isInitialized) {
             // Successful saves enqueue only these random fixture workspace IDs. The real
             // repository has no such IDs, so a worker cannot write to the fixture or QA files.
             workspaceIds.forEach { id ->
-                WorkManager.getInstance(realApp).cancelUniqueWork("orgenda-sync-$id").result.get(10, TimeUnit.SECONDS)
+                WorkManager.getInstance(realApp)
+                    .cancelUniqueWork("orgenda-sync-$id")
+                    .result
+                    .get(10, TimeUnit.SECONDS)
             }
         }
         if (::app.isInitialized) app.scope.cancel()
-        if (::repository.isInitialized) { repository.engine.close(); repository.database.close() }
+        if (::repository.isInitialized) {
+            repository.engine.close()
+            repository.database.close()
+        }
         if (::root.isInitialized) root.deleteRecursively()
         if (::realApp.isInitialized) preferenceNames.forEach { realApp.deleteSharedPreferences(it) }
     }
 
-    private suspend fun createModel() = withContext(Dispatchers.Main.immediate) {
-        models = ViewModelStore()
-        model = ViewModelProvider(models, ViewModelProvider.AndroidViewModelFactory(app))[OrgendaViewModel::class.java]
-    }
+    private suspend fun createModel() =
+        withContext(Dispatchers.Main.immediate) {
+            models = ViewModelStore()
+            model =
+                ViewModelProvider(models, ViewModelProvider.AndroidViewModelFactory(app))[
+                    OrgendaViewModel::class.java]
+        }
 
-    private suspend fun awaitConfiguration(predicate: (ConfigurationEdit) -> Boolean): ConfigurationEdit =
+    private suspend fun awaitConfiguration(
+        predicate: (ConfigurationEdit) -> Boolean
+    ): ConfigurationEdit =
         withTimeout(6000) { model.configuration.filterNotNull().first(predicate) }
 
     private suspend fun configFile(id: String = workspaceId): FileEntity =
@@ -119,7 +140,9 @@ class ConfigurationEditSafetyTest {
     }
 
     private fun allowConfigurationWrites() {
-        repository.database.openHelper.writableDatabase.execSQL("DROP TRIGGER fail_configuration_write")
+        repository.database.openHelper.writableDatabase.execSQL(
+            "DROP TRIGGER fail_configuration_write"
+        )
     }
 
     private fun assertInjectedFailure(failure: Throwable?) {
@@ -128,11 +151,35 @@ class ConfigurationEditSafetyTest {
         assertTrue(messages, messages.contains("injected configuration commit failure"))
     }
 
-    @Test fun failedCommitKeepsOldConfigurationAndTheSameRequestCanRetry() = runBlocking {
+    @Test
+    fun invalidRecoveryDraftRetainsRawTextAndUsesTheCommittedConfiguration() = runBlocking {
+        val raw = """{"version":1,"workflow":{"sequences":[]}}"""
+        withContext(Dispatchers.Main.immediate) {
+            model.configureRaw(raw)
+            models.clear()
+        }
+        createModel()
+        val recovered = awaitConfiguration { it.dirty && it.raw == raw }
+        assertEquals(baseline, recovered.value)
+        assertEquals(configFile().contentBlob, recovered.baseline)
+        assertTrue(
+            runCatching { model.saveConfigurationNow() }.exceptionOrNull()
+                is IllegalArgumentException
+        )
+        assertEquals(raw, model.configuration.value!!.raw)
+        assertTrue(model.configuration.value!!.dirty)
+        assertEquals(baseline, committedConfig())
+    }
+
+    @Test
+    fun failedCommitKeepsOldConfigurationAndTheSameRequestCanRetry() = runBlocking {
         val before = configFile()
         val edited = candidate()
         failConfigurationWrites()
-        assertInjectedFailure(runCatching { model.saveConfigurationEdit(edited, baseline, workspaceId) }.exceptionOrNull())
+        assertInjectedFailure(
+            runCatching { model.saveConfigurationEdit(edited, baseline, workspaceId) }
+                .exceptionOrNull()
+        )
 
         val retained = model.configuration.value!!
         assertEquals(baseline, retained.value)
@@ -142,7 +189,10 @@ class ConfigurationEditSafetyTest {
         assertFalse(retained.saving)
         assertNotNull(retained.error)
         assertEquals(baseline, committedConfig())
-        assertFalse(app.getSharedPreferences("configuration-drafts", Context.MODE_PRIVATE).contains(workspaceId))
+        assertFalse(
+            app.getSharedPreferences("configuration-drafts", Context.MODE_PRIVATE)
+                .contains(workspaceId)
+        )
 
         allowConfigurationWrites()
         // Waiting beyond the normal autosave debounce catches a leaked candidate draft.
@@ -156,33 +206,50 @@ class ConfigurationEditSafetyTest {
         assertEquals(configFile().contentBlob, saved.baseline)
     }
 
-    @Test fun failedCandidatePreservesAnExistingAutosaveRecoveryDraft() = runBlocking {
+    @Test
+    fun failedCandidatePreservesAnExistingAutosaveRecoveryDraft() = runBlocking {
         val priorDraft = baseline.copy(files = baseline.files.copy(inbox = "previous-draft.org"))
         val edited = candidate(priorDraft)
         failConfigurationWrites()
         withContext(Dispatchers.Main.immediate) { model.configure(priorDraft) }
-        val oldRecovery = app.getSharedPreferences("configuration-drafts", Context.MODE_PRIVATE).getString(workspaceId, null)
+        val oldRecovery =
+            app.getSharedPreferences("configuration-drafts", Context.MODE_PRIVATE)
+                .getString(workspaceId, null)
         assertNotNull(oldRecovery)
 
-        assertInjectedFailure(runCatching { model.saveConfigurationEdit(edited, priorDraft, workspaceId) }.exceptionOrNull())
+        assertInjectedFailure(
+            runCatching { model.saveConfigurationEdit(edited, priorDraft, workspaceId) }
+                .exceptionOrNull()
+        )
         val retained = model.configuration.value!!
         assertEquals(priorDraft, retained.value)
         assertEquals(priorDraft, ConfigurationCodec.decode(retained.raw))
         assertTrue(retained.dirty)
         assertFalse(retained.saving)
-        val recovery = app.getSharedPreferences("configuration-drafts", Context.MODE_PRIVATE).getString(workspaceId, null)
+        val recovery =
+            app.getSharedPreferences("configuration-drafts", Context.MODE_PRIVATE)
+                .getString(workspaceId, null)
         assertEquals(oldRecovery, recovery)
-        assertEquals(priorDraft, ConfigurationCodec.decode(Json.parseToJsonElement(recovery!!).jsonObject.getValue("raw").jsonPrimitive.content))
+        assertEquals(
+            priorDraft,
+            ConfigurationCodec.decode(
+                Json.parseToJsonElement(recovery!!).jsonObject.getValue("raw").jsonPrimitive.content
+            ),
+        )
         assertEquals(baseline, committedConfig())
     }
 
-    @Test fun staleExpectedConfigurationCannotOverwriteANewerCommit() = runBlocking {
+    @Test
+    fun staleExpectedConfigurationCannotOverwriteANewerCommit() = runBlocking {
         val newer = candidate(advance = 42)
         repository.saveConfiguration(newer, configFile().contentBlob, workspaceId)
         awaitConfiguration { it.value == newer && !it.dirty && !it.saving }
         val before = configFile()
 
-        val failure = runCatching { model.saveConfigurationEdit(candidate(), baseline, workspaceId) }.exceptionOrNull()
+        val failure = runCatching {
+            model.saveConfigurationEdit(candidate(), baseline, workspaceId)
+        }
+            .exceptionOrNull()
         assertTrue("A stale editor must be rejected", failure is IllegalArgumentException)
         assertEquals(newer, committedConfig())
         assertEquals(before.contentBlob, configFile().contentBlob)
@@ -191,35 +258,52 @@ class ConfigurationEditSafetyTest {
         assertFalse(model.configuration.value!!.saving)
     }
 
-    @Test fun rejectedStaleRequestDoesNotCancelAnotherDraftsPendingAutosave() = runBlocking {
+    @Test
+    fun rejectedStaleRequestDoesNotCancelAnotherDraftsPendingAutosave() = runBlocking {
         val priorDraft = candidate(advance = 43)
         withContext(Dispatchers.Main.immediate) { model.configure(priorDraft) }
-        val failure = runCatching { model.saveConfigurationEdit(candidate(), baseline, workspaceId) }.exceptionOrNull()
+        val failure = runCatching {
+            model.saveConfigurationEdit(candidate(), baseline, workspaceId)
+        }
+            .exceptionOrNull()
         assertTrue("A stale request must be rejected", failure is IllegalArgumentException)
 
         awaitConfiguration { it.value == priorDraft && !it.dirty && !it.saving }
         assertEquals(priorDraft, committedConfig())
-        assertFalse(app.getSharedPreferences("configuration-drafts", Context.MODE_PRIVATE).contains(workspaceId))
+        assertFalse(
+            app.getSharedPreferences("configuration-drafts", Context.MODE_PRIVATE)
+                .contains(workspaceId)
+        )
     }
 
-    @Test fun editorFromPreviousWorkspaceCannotCreateConfigurationInCurrentWorkspace() = runBlocking {
+    @Test
+    fun editorFromPreviousWorkspaceCannotCreateConfigurationInCurrentWorkspace() = runBlocking {
         val original = configFile()
         val secondId = UUID.randomUUID().toString()
         workspaceIds += secondId
         val secondRoot = File(root, "second").apply { mkdirs() }
-        repository.database.dao().putWorkspace(WorkspaceEntity(secondId, "private", secondRoot.path, "Second"))
+        repository.database
+            .dao()
+            .putWorkspace(WorkspaceEntity(secondId, "private", secondRoot.path, "Second"))
         repository.switchWorkspace(secondId)
         awaitConfiguration { it.workspaceId == secondId }
 
-        val failure = runCatching { model.saveConfigurationEdit(candidate(), baseline, workspaceId) }.exceptionOrNull()
-        assertTrue("The old sheet must not save into the new workspace", failure is IllegalArgumentException)
+        val failure = runCatching {
+            model.saveConfigurationEdit(candidate(), baseline, workspaceId)
+        }
+            .exceptionOrNull()
+        assertTrue(
+            "The old sheet must not save into the new workspace",
+            failure is IllegalArgumentException,
+        )
         assertEquals(secondId, repository.state.value.workspace!!.id)
         assertTrue(repository.database.dao().files(secondId).none { it.path == "config.json" })
         assertEquals(original.contentBlob, configFile(workspaceId).contentBlob)
         assertEquals(baseline, model.configuration.value!!.value)
     }
 
-    @Test fun recreatedViewModelCanReplayACommittedRequestWithoutWritingAgain() = runBlocking {
+    @Test
+    fun recreatedViewModelCanReplayACommittedRequestWithoutWritingAgain() = runBlocking {
         val edited = candidate()
         model.saveConfigurationEdit(edited, baseline, workspaceId)
         val committed = configFile()

@@ -1,7 +1,8 @@
 package com.roifewu.orgenda.core
 
 object ConfigurationPrompt {
-    fun text(config: WorkspaceConfig): String = """
+    fun text(config: WorkspaceConfig): String =
+        """
 Generate an Orgenda version 1 config.json from my Emacs Org configuration.
 First ask me for the Emacs configuration files and the Org workspace root if they are not provided.
 Follow variable references and related configuration files, including file/buffer-local overrides.
@@ -53,5 +54,6 @@ Inspect org-todo-keywords, org-todo-keyword-faces, org-log-*,
 org-capture-templates, org-agenda-files, org-default-notes-file, org-attach-id-dir, org-journal-dir,
 org-archive-location and org-refile-targets. Distinguish global values from hook overrides.
 Finish with a report: exact mappings, approximations, unsupported features, unresolved values.
-""".trimIndent()
+"""
+            .trimIndent()
 }

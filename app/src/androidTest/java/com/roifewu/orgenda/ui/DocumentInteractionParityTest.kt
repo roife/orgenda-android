@@ -13,30 +13,49 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class DocumentInteractionParityTest {
-    private fun editor() = NativeSourceEditor(ContextThemeWrapper(ApplicationProvider.getApplicationContext(), androidx.appcompat.R.style.Theme_AppCompat), EditorHistory())
+    private fun editor() =
+        NativeSourceEditor(
+            ContextThemeWrapper(
+                ApplicationProvider.getApplicationContext(),
+                androidx.appcompat.R.style.Theme_AppCompat,
+            ),
+            EditorHistory(),
+        )
 
-    @Test fun searchSelectsTheWholeUnicodeMatchWithoutChangingSourceOrHistory() {
+    @Test
+    fun searchSelectsTheWholeUnicodeMatchWithoutChangingSourceOrHistory() {
         InstrumentationRegistry.getInstrumentation().runOnMainSync {
             val editor = editor()
             try {
                 val source = "* 中文🧪\nCafe\u0301 and café\n"
                 editor.display(source)
                 assertTrue(editor.selectSearchMatch("CAFÉ"))
-                assertEquals("Cafe\u0301", editor.text!!.subSequence(editor.selectionStart, editor.selectionEnd).toString())
+                assertEquals(
+                    "Cafe\u0301",
+                    editor.text!!
+                        .subSequence(editor.selectionStart, editor.selectionEnd)
+                        .toString(),
+                )
                 assertEquals(source, editor.text.toString())
                 assertFalse(editor.canUndo)
                 assertFalse(editor.selectSearchMatch("missing"))
-            } finally { editor.dispose() }
+            } finally {
+                editor.dispose()
+            }
         }
     }
 
-    @Test fun readingPositionFollowsTheViewportInsteadOfAnOffscreenCaret() {
+    @Test
+    fun readingPositionFollowsTheViewportInsteadOfAnOffscreenCaret() {
         InstrumentationRegistry.getInstrumentation().runOnMainSync {
             val editor = editor()
             try {
                 val source = (1..100).joinToString("\n") { "Line $it 中文" }
                 editor.display(source)
-                editor.measure(View.MeasureSpec.makeMeasureSpec(600, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(240, View.MeasureSpec.EXACTLY))
+                editor.measure(
+                    View.MeasureSpec.makeMeasureSpec(600, View.MeasureSpec.EXACTLY),
+                    View.MeasureSpec.makeMeasureSpec(240, View.MeasureSpec.EXACTLY),
+                )
                 editor.layout(0, 0, 600, 240)
                 editor.setSelection(0)
                 var reading = -1
@@ -47,11 +66,14 @@ class DocumentInteractionParityTest {
                 assertEquals(0, editor.selectionStart)
                 assertEquals(SourceText(source).byteOffset(offset), reading)
                 assertTrue(reading > 0)
-            } finally { editor.dispose() }
+            } finally {
+                editor.dispose()
+            }
         }
     }
 
-    @Test fun undoAndRedoAvailabilityTracksEditsAndProtectsComposingText() {
+    @Test
+    fun undoAndRedoAvailabilityTracksEditsAndProtectsComposingText() {
         InstrumentationRegistry.getInstrumentation().runOnMainSync {
             val editor = editor()
             try {
@@ -72,11 +94,14 @@ class DocumentInteractionParityTest {
                 editor.undo()
                 assertEquals(composing, editor.text.toString())
                 connection.finishComposingText()
-            } finally { editor.dispose() }
+            } finally {
+                editor.dispose()
+            }
         }
     }
 
-    @Test fun readableTimestampKeepsTimeRangeRepeatLimitAndUnknownAnnotations() {
+    @Test
+    fun readableTimestampKeepsTimeRangeRepeatLimitAndUnknownAnnotations() {
         val context = ApplicationProvider.getApplicationContext<android.content.Context>()
         val source = "SCHEDULED: <2026-10-22 Thu 09:00-10:30 ++1d/3d -2d custom>"
         val readable = readableTimestamp(context, source)
@@ -86,7 +111,8 @@ class DocumentInteractionParityTest {
         assertTrue(readable.contains("-2d custom"))
     }
 
-    @Test fun consecutiveTypingUndoesAndRedoesAsOneEdit() {
+    @Test
+    fun consecutiveTypingUndoesAndRedoesAsOneEdit() {
         InstrumentationRegistry.getInstrumentation().runOnMainSync {
             val editor = editor()
             try {
@@ -105,11 +131,14 @@ class DocumentInteractionParityTest {
                 editor.redo()
                 assertEquals("* TODO hello 中文🧪", editor.text.toString())
                 assertEquals(editor.length(), editor.selectionStart)
-            } finally { editor.dispose() }
+            } finally {
+                editor.dispose()
+            }
         }
     }
 
-    @Test fun movingAwayAndBackEndsTheTypingGroupBeforeTheNextInput() {
+    @Test
+    fun movingAwayAndBackEndsTheTypingGroupBeforeTheNextInput() {
         InstrumentationRegistry.getInstrumentation().runOnMainSync {
             val editor = editor()
             try {
@@ -129,11 +158,14 @@ class DocumentInteractionParityTest {
                 editor.undo()
                 assertEquals("Body ", editor.text.toString())
                 assertFalse(editor.canUndo)
-            } finally { editor.dispose() }
+            } finally {
+                editor.dispose()
+            }
         }
     }
 
-    @Test fun movingSelectionAndToolbarCommandsEndTheTypingUndoGroup() {
+    @Test
+    fun movingSelectionAndToolbarCommandsEndTheTypingUndoGroup() {
         InstrumentationRegistry.getInstrumentation().runOnMainSync {
             val editor = editor()
             try {
@@ -154,11 +186,14 @@ class DocumentInteractionParityTest {
                 editor.undo()
                 assertEquals("Body ", editor.text.toString())
                 assertFalse(editor.canUndo)
-            } finally { editor.dispose() }
+            } finally {
+                editor.dispose()
+            }
         }
     }
 
-    @Test fun endingEditingSeparatesTypingAndCommittedCompositionIsImmediatelyUndoable() {
+    @Test
+    fun endingEditingSeparatesTypingAndCommittedCompositionIsImmediatelyUndoable() {
         InstrumentationRegistry.getInstrumentation().runOnMainSync {
             val editor = editor()
             try {
@@ -174,11 +209,14 @@ class DocumentInteractionParityTest {
                 assertEquals("ab", editor.text.toString())
                 editor.undo()
                 assertEquals("", editor.text.toString())
-            } finally { editor.dispose() }
+            } finally {
+                editor.dispose()
+            }
         }
     }
 
-    @Test fun externalSourceReplacementClearsOldUndoAndRedoWithoutOverwritingTheReplacement() {
+    @Test
+    fun externalSourceReplacementClearsOldUndoAndRedoWithoutOverwritingTheReplacement() {
         InstrumentationRegistry.getInstrumentation().runOnMainSync {
             val editor = editor()
             try {
@@ -197,14 +235,21 @@ class DocumentInteractionParityTest {
                 editor.undo()
                 editor.redo()
                 assertEquals(external, editor.text.toString())
-            } finally { editor.dispose() }
+            } finally {
+                editor.dispose()
+            }
         }
     }
 
-    @Test fun recreatingTheEditorForTheSameSourceKeepsItsDocumentHistory() {
+    @Test
+    fun recreatingTheEditorForTheSameSourceKeepsItsDocumentHistory() {
         InstrumentationRegistry.getInstrumentation().runOnMainSync {
             val history = EditorHistory()
-            val context = ContextThemeWrapper(ApplicationProvider.getApplicationContext(), androidx.appcompat.R.style.Theme_AppCompat)
+            val context =
+                ContextThemeWrapper(
+                    ApplicationProvider.getApplicationContext(),
+                    androidx.appcompat.R.style.Theme_AppCompat,
+                )
             val original = "* Original\n"
             val first = NativeSourceEditor(context, history)
             first.display(original)
@@ -220,7 +265,9 @@ class DocumentInteractionParityTest {
                 assertEquals(original, recreated.text.toString())
                 recreated.redo()
                 assertEquals(draft, recreated.text.toString())
-            } finally { recreated.dispose() }
+            } finally {
+                recreated.dispose()
+            }
         }
     }
 }

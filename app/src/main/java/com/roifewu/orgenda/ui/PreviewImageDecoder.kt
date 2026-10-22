@@ -13,8 +13,16 @@ internal object PreviewImageDecoder {
 
     private fun isTiff(bytes: ByteArray): Boolean {
         if (bytes.size < 4) return false
-        val little = bytes[0] == 73.toByte() && bytes[1] == 73.toByte() && bytes[3] == 0.toByte() && bytes[2].toInt() in listOf(42, 43)
-        val big = bytes[0] == 77.toByte() && bytes[1] == 77.toByte() && bytes[2] == 0.toByte() && bytes[3].toInt() in listOf(42, 43)
+        val little =
+            bytes[0] == 73.toByte() &&
+                bytes[1] == 73.toByte() &&
+                bytes[3] == 0.toByte() &&
+                bytes[2].toInt() in 42..43
+        val big =
+            bytes[0] == 77.toByte() &&
+                bytes[1] == 77.toByte() &&
+                bytes[2] == 0.toByte() &&
+                bytes[3].toInt() in 42..43
         return little || big
     }
 
@@ -26,13 +34,23 @@ internal object PreviewImageDecoder {
         return tiffDecode.withLock {
             runInterruptible(Dispatchers.IO) {
                 val pixels = NativeTiff.decode(bytes, MAX_SIDE)
-                Bitmap.createBitmap(pixels, 2, pixels[0], pixels[0], pixels[1], Bitmap.Config.ARGB_8888)
+                Bitmap.createBitmap(
+                    pixels,
+                    2,
+                    pixels[0],
+                    pixels[0],
+                    pixels[1],
+                    Bitmap.Config.ARGB_8888,
+                )
             }
         }
     }
 }
 
 private object NativeTiff {
-    init { System.loadLibrary("orgenda_images") }
+    init {
+        System.loadLibrary("orgenda_images")
+    }
+
     external fun decode(bytes: ByteArray, maxSide: Int): IntArray
 }

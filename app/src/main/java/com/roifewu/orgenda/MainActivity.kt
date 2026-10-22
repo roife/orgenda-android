@@ -1,21 +1,22 @@
 package com.roifewu.orgenda
 
-import android.os.Bundle
 import android.content.Intent
+import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
-import androidx.lifecycle.Lifecycle
-import kotlinx.coroutines.*
 import com.roifewu.orgenda.ui.OrgendaApp
+import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 
 class MainActivity : ComponentActivity() {
     private lateinit var model: OrgendaViewModel
     private val launchIntent = MutableStateFlow<Intent?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -26,12 +27,26 @@ class MainActivity : ComponentActivity() {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 model.app.ready.await()
                 while (isActive) {
-                    try { model.repository.sync(pull = true) } catch (e: CancellationException) { throw e } catch (e: Exception) { model.repository.error(e) }
+                    try {
+                        model.repository.sync(pull = true)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        model.repository.error(e)
+                    }
                     delay(30_000)
                 }
             }
         }
     }
-    override fun onNewIntent(intent: Intent) { super.onNewIntent(intent); launchIntent.value = intent }
-    override fun onStop() { model.flush(); super.onStop() }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        launchIntent.value = intent
+    }
+
+    override fun onStop() {
+        model.flush()
+        super.onStop()
+    }
 }

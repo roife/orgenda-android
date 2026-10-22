@@ -1,10 +1,10 @@
 # Android 0.1.3 功能对齐与验收
 
-日期：2026-10-22。安装包 `artifacts/orgenda-0.1.3.apk`，versionCode 4。沿用当前 main 分支，未运行格式化工具、未创建分支、未修改 iOS。与「规划原生安卓版本迁移」协调后，由设置、文件、日程、文档及数据安全专项并行核对。历史版本独立保留：[0.1.0](ACCEPTANCE-0.1.0.md)、[0.1.1](ACCEPTANCE-0.1.1.md)、[0.1.2](ACCEPTANCE-0.1.2.md)。
+日期：2026-10-22。安装包 `artifacts/orgenda-0.1.3.apk`，versionCode 4。沿用当前 main 分支，未运行格式化工具、未创建分支、未修改 iOS。与「规划原生安卓版本迁移」协调后，由设置、文件、日程、文档及数据安全专项并行核对。历史安装包与机器可读构建摘要独立保留。
 
 ## 本轮功能
 
-在 [108 个 iOS UI 及界面支撑文件映射](UI_COMPONENTS.md) 上继续检查实际操作与提交时序。逐项差异及 iOS 依据见 [0.1.3 功能对齐补充](FUNCTION_PARITY-0.1.3.md)。
+本记录对应 0.1.3 安装包；后续编辑行为更新见 [Preview / Edit 对齐记录](ui-parity-preview-edit-2026-10.md)，实现边界见 [Android 架构](ANDROID_ARCHITECTURE.md)。
 
 - **设置保存**：模板和工作流状态表单等待本地事务成功才关闭；保存时禁用输入、重复提交和退出，失败保留草稿并支持重试。工作区或配置基线改变时拒绝旧提交；旋转后已完成的同一保存可以安全重放。失败候选不进入全局自动保存队列，过期请求不会取消其他配置的自动保存。
 - **文件操作**：移动等待本地提交，失败保留名称和目标目录；各工作区、各目录独立恢复滚动位置；回收站按真实删除树显示根项，保留独立删除和孤立文件。
@@ -33,11 +33,11 @@ Debug / Release 构建与 Lint 通过：二者均为 **0 error、375 warnings、
 
 沿用稳定证书，SHA-256：`1bc5d142b26c9b8327163ea1b2bf245fb1555834daa6ff13f8b3a72659e07ad0`。签名与 `zipalign -c -P 16 -v 4` 校验通过。在 API 36 arm64、实际 `PAGESIZE = 16384` 的隔离 QA 模拟器上，从 0.1.2 原位升级并冷启动成功，保留已有工作区数据，UI 树确认进入日程首页。
 
-证据均在 `artifacts/function-parity/`：`signature.txt`、`zipalign.txt`、`release-upgrade.txt`、`page-size.txt`、`release-launch.txt`、`release-ui.xml`。机器可读摘要见 [build-verification.json](build-verification.json)。0.1.2 的 APK、验收和构建摘要独立保留；用户试用模拟器未被本轮 QA 操作改动。
+证据均在 `artifacts/function-parity/`：`signature.txt`、`zipalign.txt`、`release-upgrade.txt`、`page-size.txt`、`release-launch.txt`、`release-ui.xml`。机器可读摘要见 [build-verification.json](build-verification.json)。0.1.2 的 APK 和构建摘要独立保留；用户试用模拟器未被本轮 QA 操作改动。
 
 ## 保留差异与验证边界
 
-- 预览中的复选框、状态等修改尚未全部纳入源码的同一撤销栈；正文变化时先清除失效历史。大纲仍显示工作流原始 token；大纲跳转定位光标，但收起的键盘不会自动弹出。详见 [文档专项](ui-parity-document.md)。
+- 预览中的复选框、状态等修改尚未全部纳入源码的同一撤销栈；正文变化时先清除失效历史。大纲仍显示工作流原始 token；大纲跳转定位光标，但收起的键盘不会自动弹出。这些是 0.1.3 安装包的历史差异，后续修复见 [Preview / Edit 对齐记录](ui-parity-preview-edit-2026-10.md)。
 - 设置保留 Android 独立导航目的地；窗口宽度决定双栏；其他设置项仍使用自动保存；远端同步继续通过持久队列完成。Material 控件、文本菜单、动画和输入法交互遵循 Android。
 - 本轮验证包含保存实例状态恢复，不代表系统终止进程后所有草稿均可恢复。真实 TalkBack、实际中文输入法、硬件键盘/触觉、不同 SAF 提供方、厂商后台休眠及真实坚果云账户仍需实际环境验证。
-- 原图片解码范围、代码高亮语言集合、SAF 相对路径及 WorkManager 调度等平台差异沿用 [0.1.2 验收](ACCEPTANCE-0.1.2.md)。历史截图和设备观察没有标成本轮完整重测。
+- 图片使用 Android/Coil 与原生 TIFF 解码器；TIFF 限首图、16 Mi 像素和最长 2048 输出边。代码高亮语言集合不同于 iOS，不支持的语言保留原文。SAF 使用工作区内相对路径；WorkManager 和前台检查替代 iOS 文件监听，调度与跨应用写入保证不同。历史截图和设备观察没有标成本轮完整重测。

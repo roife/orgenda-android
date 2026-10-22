@@ -1,8 +1,13 @@
+<?xml version="1.0"?>
 <resources>
-    <style name="Theme.Orgenda" parent="android:style/Theme.Material.Light.NoActionBar">
+    <bool name="orgenda_light_system_bars">true</bool>
+    <color name="orgenda_accent">#32694B</color>
+    <style name="Theme.Orgenda" parent="Theme.AppCompat.DayNight.NoActionBar">
         <item name="android:fontFamily">sans</item>
-        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightStatusBar">@bool/orgenda_light_system_bars</item>
+        <item name="android:windowLightNavigationBar">@bool/orgenda_light_system_bars</item>
         <item name="android:windowActionModeOverlay">true</item>
-        <item name="android:colorAccent">#32694B</item>
+        <item name="android:colorAccent">@color/orgenda_accent</item>
+        <item name="android:forceDarkAllowed">false</item>
     </style>
 </resources>

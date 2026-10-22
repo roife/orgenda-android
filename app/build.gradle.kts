@@ -1,4 +1,5 @@
 import java.util.Properties
+
 plugins {
     id("com.android.application")
     kotlin("android")
@@ -6,10 +7,13 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
     id("com.google.devtools.ksp")
 }
-val signing = Properties().apply {
-    val config = rootProject.file("signing.properties")
-    if (config.exists()) config.inputStream().use { load(it) }
-}
+
+val signing =
+    Properties().apply {
+        val config = rootProject.file("signing.properties")
+        if (config.exists()) config.inputStream().use { load(it) }
+    }
+
 android {
     namespace = "com.roifewu.orgenda"
     compileSdk = 36
@@ -23,31 +27,42 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
     }
-    if (signing.isNotEmpty()) signingConfigs.create("personal") {
-        storeFile = file(signing.getProperty("storeFile"))
-        storePassword = signing.getProperty("storePassword")
-        keyAlias = signing.getProperty("keyAlias")
-        keyPassword = signing.getProperty("keyPassword")
-    }
+    if (signing.isNotEmpty())
+        signingConfigs.create("personal") {
+            storeFile = file(signing.getProperty("storeFile"))
+            storePassword = signing.getProperty("storePassword")
+            keyAlias = signing.getProperty("keyAlias")
+            keyPassword = signing.getProperty("keyPassword")
+        }
     buildTypes {
         release {
-            isMinifyEnabled = false
             if (signing.isNotEmpty()) signingConfig = signingConfigs.getByName("personal")
-            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
     buildFeatures { compose = true }
-    compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
-    kotlinOptions { jvmTarget = "17" }
-    externalNativeBuild { cmake { path = file("../native/CMakeLists.txt"); version = "3.22.1" } }
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+    externalNativeBuild {
+        cmake {
+            path = file("../native/CMakeLists.txt")
+            version = "3.22.1"
+        }
+    }
     packaging { resources.excludes += "/META-INF/{AL2.0,LGPL2.1}" }
     testOptions { unitTests.isIncludeAndroidResources = true }
 }
+
+kotlin { jvmToolchain(17) }
+
 ksp { arg("room.schemaLocation", "$projectDir/schemas") }
+
 dependencies {
     implementation(project(":core"))
     implementation(platform("androidx.compose:compose-bom:2025.04.01"))
     implementation("androidx.activity:activity-compose:1.10.1")
+    implementation("androidx.compose.animation:animation")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.compose.ui:ui-tooling-preview")
@@ -68,7 +83,9 @@ dependencies {
     implementation("io.coil-kt.coil3:coil-gif:3.1.0")
     implementation("io.coil-kt.coil3:coil-network-okhttp:3.1.0")
     implementation("io.github.erweixin:ratex-android:0.1.14")
-    implementation("io.noties:prism4j:2.0.0") { exclude(group = "org.jetbrains", module = "annotations-java5") }
+    implementation("io.noties:prism4j:2.0.0") {
+        exclude(group = "org.jetbrains", module = "annotations-java5")
+    }
     annotationProcessor("io.noties:prism4j-bundler:2.0.0")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.robolectric:robolectric:4.14.1")
