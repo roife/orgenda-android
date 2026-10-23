@@ -126,7 +126,7 @@ class OrgendaViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    fun action(block: suspend () -> Unit) =
+    fun action(onFailure: (Exception) -> Unit = {}, block: suspend () -> Unit) =
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 block()
@@ -135,6 +135,7 @@ class OrgendaViewModel(application: Application) : AndroidViewModel(application)
                 throw e
             } catch (e: Exception) {
                 repository.error(e)
+                withContext(Dispatchers.Main.immediate) { onFailure(e) }
             }
         }
 
@@ -355,7 +356,12 @@ class OrgendaViewModel(application: Application) : AndroidViewModel(application)
         open(file, byte)
     }
 
-    fun moveHeading(item: OrgHeading, target: OrgHeading, placement: HeadingPlacement) = action {
+    fun moveHeading(
+        item: OrgHeading,
+        target: OrgHeading,
+        placement: HeadingPlacement,
+        onFailure: (Exception) -> Unit = {},
+    ) = action(onFailure) {
         saveNow()
         val file = workspace.value.files.first { it.path == item.path }
         val document =

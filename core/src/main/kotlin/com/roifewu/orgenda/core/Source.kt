@@ -163,12 +163,22 @@ data class SyntaxDocument(val source: SourceText, val nodes: List<OrgNode>) {
             blocks.none {
                 it.start < end &&
                     it.end > start &&
-                    (it.error || it.type == "orphan_drawer_delimiter")
+                    ((it.error && !isRecoveredParagraphIndent(it)) ||
+                        it.type == "orphan_drawer_delimiter")
             }
         ) {
             "Repair unfinished Org blocks or drawers before structural editing"
         }
     }
+
+    // The grammar can recover an indented paragraph as a horizontal-whitespace ERROR followed
+    // by a valid paragraph. Those bytes are ordinary body indentation, preserved by structural
+    // edits. Only this exact recovery is safe; unfinished blocks/drawers still reject edits.
+    private fun isRecoveredParagraphIndent(node: OrgNode): Boolean =
+        node.type == "ERROR" && node.end > node.start &&
+            (node.start == 0 || source.bytes[node.start - 1] == '\n'.code.toByte()) &&
+            source.slice(node.start, node.end).all { it == ' ' || it == '\t' } &&
+            blocks.any { it.start == node.end && it.type == "paragraph" && !it.error }
 }
 
 class OrgParser : AutoCloseable {

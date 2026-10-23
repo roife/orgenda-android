@@ -9,9 +9,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Undo
@@ -27,13 +26,11 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
-import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.roifewu.orgenda.core.*
 import com.roifewu.orgenda.data.WorkspaceSnapshot
 import java.util.Locale
@@ -90,7 +87,8 @@ fun TaskRow(
         Row(
             Modifier.fillMaxWidth()
                 .background(MaterialTheme.colorScheme.surface)
-                .combinedClickable(onClick = onOpen, onLongClick = { preview = true })
+                .then(if (draggable) Modifier.orgDrag("task", dragItem) else Modifier)
+                .combinedClickable(onClick = onOpen, onLongClick = if (draggable) null else { { preview = true } })
                 .semantics {
                     customActions =
                         listOfNotNull(
@@ -109,9 +107,13 @@ fun TaskRow(
                         )
                 }
                 .heightIn(min = 72.dp)
-                .padding(start = 12.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
+                .padding(
+                    start = UiSpacing.taskLeadingInset,
+                    end = UiSpacing.edge,
+                    top = UiSpacing.xs,
+                    bottom = UiSpacing.xs,
+                ),
             verticalAlignment = Alignment.Top,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             val status: @Composable () -> Unit = {
                 if (item.isTask) WorkflowIcon(item, Modifier.size(21.dp))
@@ -136,8 +138,7 @@ fun TaskRow(
                 IconButton(
                     onClick = onToggle,
                     modifier =
-                        Modifier.size(48.dp)
-                            .then(if (draggable) Modifier.orgDrag("task", dragItem) else Modifier)
+                        Modifier.size(UiSizes.touchTarget)
                             .testTag("agenda.item.complete.${item.id}")
                             .semantics {
                                 contentDescription =
@@ -147,13 +148,14 @@ fun TaskRow(
                 ) {
                     status()
                 }
-            else Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) { status() }
+            else Box(Modifier.size(UiSizes.touchTarget), contentAlignment = Alignment.Center) { status() }
+            Spacer(Modifier.width(UiSpacing.taskStatusGap))
             Column(
                 Modifier.weight(1f).padding(vertical = 10.dp),
                 verticalArrangement = Arrangement.spacedBy(5.dp),
             ) {
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(UiSpacing.controlGap),
                     verticalAlignment = Alignment.Top,
                 ) {
                     if (item.priority.isNotEmpty()) {
@@ -171,9 +173,9 @@ fun TaskRow(
                             Modifier.alignByBaseline()
                                 .background(
                                     priorityColor.copy(alpha = 0.10f),
-                                    RoundedCornerShape(4.dp),
+                                    MaterialTheme.shapes.small,
                                 )
-                                .padding(horizontal = 5.dp, vertical = 2.dp)
+                                .padding(horizontal = UiSpacing.priorityLabelHorizontal, vertical = UiSpacing.xxs)
                                 .semantics {
                                     contentDescription =
                                         context.label("priority") + ": " + item.priority
@@ -200,8 +202,8 @@ fun TaskRow(
                     )
                 }
                 FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                    horizontalArrangement = Arrangement.spacedBy(UiSpacing.sm),
+                    verticalArrangement = Arrangement.spacedBy(UiSpacing.xxs),
                 ) {
                     if (time != null)
                         Text(
@@ -224,8 +226,8 @@ fun TaskRow(
                 }
                 if (item.tags.isNotEmpty())
                     FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(UiSpacing.controlGap),
+                        verticalArrangement = Arrangement.spacedBy(UiSpacing.controlGap),
                     ) {
                         item.tags.forEach { tag ->
                             Text(
@@ -234,24 +236,22 @@ fun TaskRow(
                                         MaterialTheme.colorScheme.secondaryContainer,
                                         MaterialTheme.shapes.small,
                                     )
-                                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                                    .padding(horizontal = UiSpacing.sm, vertical = UiSpacing.xs),
                                 color = MaterialTheme.colorScheme.onSecondaryContainer,
                                 style = MaterialTheme.typography.labelMedium,
                             )
                         }
                     }
                 if (item.habit)
-                    Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(UiSpacing.xxs)) {
                         (0L..6L).forEach { offset ->
                             val day = today.minusDays(offset)
                             Surface(
                                 color =
                                     if (day in item.completedDays) workflowColor("green")
                                     else
-                                        MaterialTheme.colorScheme.onSurfaceVariant.copy(
-                                            alpha = 0.18f
-                                        ),
-                                shape = RoundedCornerShape(1.5.dp),
+                                        uiColors().pendingHabit,
+                                shape = MaterialTheme.shapes.small,
                                 modifier =
                                     Modifier.width(5.dp).height(10.dp).semantics {
                                         contentDescription =
@@ -265,18 +265,16 @@ fun TaskRow(
                         }
                     }
             }
-            if (draggable)
-                Icon(
-                    Icons.Default.DragIndicator,
-                    tr("drag_task"),
-                    Modifier.size(48.dp).orgDrag("task", dragItem).padding(12.dp),
-                    tint = mutedControlColor(),
-                )
+            Spacer(Modifier.width(UiSpacing.listItemGap))
             Box {
-                IconButton(onClick = { menu = true }, modifier = Modifier.size(48.dp)) {
-                    Icon(Icons.Default.MoreVert, tr("more_actions"), tint = mutedControlColor())
+                IconButton(onClick = { menu = true }, modifier = Modifier.size(UiSizes.touchTarget)) {
+                    Icon(Icons.Default.MoreVert, tr("more_actions"), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 DropdownMenu(menu, { menu = false }) {
+                    if (draggable) DropdownMenuItem(
+                        text = { Text(tr("preview")) },
+                        onClick = { menu = false; preview = true },
+                    )
                     if (item.canComplete)
                         DropdownMenuItem(
                             text = { Text(tr(completionKey)) },
@@ -380,6 +378,7 @@ fun TaskRow(
                     if (item.habit) HabitHistory(item)
                     if (item.canComplete)
                         TextButton(
+                            shape = MaterialTheme.shapes.medium,
                             onClick = {
                                 preview = false
                                 onToggle()
@@ -389,6 +388,7 @@ fun TaskRow(
                         }
                     if (schedule != null)
                         TextButton(
+                            shape = MaterialTheme.shapes.medium,
                             onClick = {
                                 preview = false
                                 schedule()
@@ -398,6 +398,7 @@ fun TaskRow(
                         }
                     if (onShowFile != null)
                         TextButton(
+                            shape = MaterialTheme.shapes.medium,
                             onClick = {
                                 preview = false
                                 onShowFile()
@@ -409,6 +410,7 @@ fun TaskRow(
             },
             confirmButton = {
                 TextButton(
+                    shape = MaterialTheme.shapes.medium,
                     onClick = {
                         preview = false
                         onOpen()
@@ -417,7 +419,7 @@ fun TaskRow(
                     Text(tr("edit"))
                 }
             },
-            dismissButton = { TextButton(onClick = { preview = false }) { Text(tr("close")) } },
+            dismissButton = { TextButton(shape = MaterialTheme.shapes.medium, onClick = { preview = false }) { Text(tr("close")) } },
         )
     }
 }
@@ -429,8 +431,8 @@ fun HabitHistory(item: OrgHeading) {
     Column(Modifier.widthIn(max = 360.dp).fillMaxWidth()) {
         Text(tr("habit_history"), style = MaterialTheme.typography.labelMedium)
         for (week in 0..3) Row(
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(UiSpacing.xs),
+            modifier = Modifier.fillMaxWidth().padding(top = UiSpacing.xs),
         ) {
             for (day in 0..6) {
                 val date = today.minusDays((27 - week * 7 - day).toLong())
@@ -489,9 +491,10 @@ fun AgendaPerspectiveMenu(
     var expanded by remember { mutableStateOf(false) }
     Box {
         TextButton(
+            shape = MaterialTheme.shapes.medium,
             onClick = { expanded = true },
             enabled = enabled,
-            contentPadding = PaddingValues(start = 0.dp, end = 8.dp),
+            contentPadding = PaddingValues(start = 0.dp, end = UiSpacing.sm),
             colors =
                 ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onSurface),
             modifier =
@@ -510,8 +513,8 @@ fun AgendaPerspectiveMenu(
             Icon(
                 Icons.Default.ArrowDropDown,
                 null,
-                Modifier.padding(start = 4.dp),
-                tint = if (enabled) mutedControlColor() else LocalContentColor.current,
+                Modifier.padding(start = UiSpacing.xs),
+                tint = if (enabled) MaterialTheme.colorScheme.onSurfaceVariant else LocalContentColor.current,
             )
         }
         DropdownMenu(expanded = expanded && enabled, onDismissRequest = { expanded = false }) {
@@ -558,6 +561,13 @@ fun AgendaScreen(
     val unscheduled = openItems.filter { it.agendaStamp == null }.sortedWith(Agenda.priorityOrder)
     val overdue = openItems.filter { Agenda.overdue(it, today) }
     val canonical = remember(snapshot.revision) { snapshot.items.associateBy { it.id } }
+    val upcomingDays =
+        remember(snapshot.revision, currentDay) {
+            (0L..6L).map { delta ->
+                val day = today.plusDays(delta)
+                day to Agenda.on(snapshot.items, day)
+            }
+        }
     val groups =
         remember(snapshot.revision, displayedPerspective, currentDay, locale) {
             when (displayedPerspective) {
@@ -568,9 +578,7 @@ fun AgendaScreen(
                                 context.label("overdue") to
                                     overdue.sortedBy { it.agendaStamp?.date }
                             )
-                        (0L..6L).forEach { delta ->
-                            val day = today.plusDays(delta)
-                            val items = Agenda.on(snapshot.items, day)
+                        upcomingDays.forEach { (day, items) ->
                             if (items.isNotEmpty())
                                 add(
                                     day.format(
@@ -635,7 +643,7 @@ fun AgendaScreen(
             perspectiveStates.SaveableStateProvider(displayedPerspective) {
                 LazyColumn(
                     modifier = Modifier.testTag("agenda.list.$displayedPerspective"),
-                    contentPadding = PaddingValues(bottom = 96.dp),
+                    contentPadding = PaddingValues(bottom = UiSpacing.listBottomWithFab),
                 ) {
 
                     // The date scope is still shown when Overdue is the only populated group.
@@ -644,24 +652,20 @@ fun AgendaScreen(
                             displayedPerspective == "overview" &&
                                 index == if (overdue.isEmpty()) 0 else 1
                         ) {
-                            item(key = "date-scope") {
-                                Text(
+                            stickyHeader(key = "date-scope") {
+                                ListSectionHeader(
                                     tr("next_seven_days"),
-                                    Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                                        .semantics { heading() },
-                                    style =
-                                        MaterialTheme.typography.titleMedium.copy(fontSize = 18.sp),
+                                    upcomingDays.sumOf { it.second.size },
                                 )
                             }
-                            if (
-                                (0L..6L).all {
-                                    Agenda.on(snapshot.items, today.plusDays(it)).isEmpty()
-                                }
-                            )
+                            if (upcomingDays.all { it.second.isEmpty() })
                                 item(key = "empty-date-scope") {
                                     Text(
                                         tr("nothing_next_seven_days"),
-                                        Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                                        Modifier.padding(
+                                            horizontal = UiSpacing.edge,
+                                            vertical = UiSpacing.xs + UiSpacing.supportingTextExtraVertical,
+                                        ),
                                         style = MaterialTheme.typography.bodyMedium,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
@@ -670,7 +674,7 @@ fun AgendaScreen(
                         if (index == groups.size) continue
                         val (title, rows) = groups[index]
                         stickyHeader(key = "header:$index") { ListSectionHeader(title, rows.size) }
-                        items(rows, key = { "$index:${it.id}" }) { item ->
+                        itemsIndexed(rows, key = { _, item -> "$index:${item.id}" }) { rowIndex, item ->
                             val original = canonical.getValue(item.id)
                             TaskRow(
                                 item,
@@ -681,10 +685,14 @@ fun AgendaScreen(
                                 onShowFile = { showFile(original) },
                                 onReschedule = { reschedule(original) },
                             )
-                            HorizontalDivider(
-                                Modifier.padding(start = 72.dp, end = 16.dp),
-                                color = MaterialTheme.colorScheme.outlineVariant,
-                            )
+                            if (rowIndex < rows.lastIndex)
+                                HorizontalDivider(
+                                    Modifier.padding(
+                                        start = UiSpacing.taskTextInset,
+                                        end = UiSpacing.edge,
+                                    ),
+                                    color = MaterialTheme.colorScheme.outlineVariant,
+                                )
                         }
                     }
                 }

@@ -139,9 +139,9 @@ fun CaptureSheet(
         Column(
             Modifier.fillMaxWidth()
                 .verticalScroll(rememberScrollState())
-                .padding(20.dp)
+                .padding(UiSpacing.edge)
                 .imePadding(),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(UiSpacing.md),
         ) {
             Text(tr("capture"), style = MaterialTheme.typography.headlineSmall)
             if (templates.size > 1)
@@ -193,7 +193,7 @@ fun CaptureSheet(
                 if (prompt.choices.isNotEmpty())
                     Row(
                         Modifier.horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(UiSpacing.sm),
                     ) {
                         prompt.choices.forEach { value ->
                             SuggestionChip(
@@ -210,7 +210,7 @@ fun CaptureSheet(
                 Field(selection, { selection = it }, "selected_text", singleLine = false)
             if (template.template.contains("%x")) {
                 Field(clipboardText, { clipboardText = it }, "clipboard_text", singleLine = false)
-                TextButton(onClick = { clipboardText = clipboard.getText()?.text.orEmpty() }) {
+                TextButton(shape = MaterialTheme.shapes.medium, onClick = { clipboardText = clipboard.getText()?.text.orEmpty() }) {
                     Text(tr("paste"))
                 }
             }
@@ -226,7 +226,11 @@ fun CaptureSheet(
                     Text(tr("create_missing"), Modifier.weight(1f))
                     Switch(createMissing, { createMissing = it })
                 }
-            OutlinedButton(onClick = ::render, enabled = !saving) { Text(tr("preview")) }
+            OutlinedButton(
+                onClick = ::render,
+                enabled = !saving,
+                shape = MaterialTheme.shapes.medium,
+            ) { Text(tr("preview")) }
             preview?.let { generated ->
                 Surface(
                     color = MaterialTheme.colorScheme.surfaceContainer,
@@ -235,7 +239,7 @@ fun CaptureSheet(
                     SelectionContainer {
                         Text(
                             generated.text,
-                            Modifier.fillMaxWidth().padding(12.dp),
+                            Modifier.fillMaxWidth().padding(UiSpacing.md),
                             fontFamily = FontFamily.Monospace,
                         )
                     }
@@ -243,14 +247,16 @@ fun CaptureSheet(
             }
                 ?: Text(
                     tr("preview_before_capture"),
+                    Modifier.padding(vertical = UiSpacing.supportingTextExtraVertical),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             error?.let { SelectionContainer { Text(it, color = MaterialTheme.colorScheme.error) } }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                TextButton(onClick = ::dismiss, enabled = !saving) { Text(tr("cancel")) }
+                TextButton(shape = MaterialTheme.shapes.medium, onClick = ::dismiss, enabled = !saving) { Text(tr("cancel")) }
                 if (!previewOnly)
                     Button(
+                        shape = MaterialTheme.shapes.medium,
                         enabled = !saving && preview?.text?.isNotBlank() == true,
                         onClick = {
                             val generated = preview ?: return@Button
@@ -283,7 +289,7 @@ fun CaptureSheet(
                         Text(tr("insert"))
                     }
             }
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(UiSpacing.xl))
         }
     }
     if (confirmDiscard) DiscardDialog({ confirmDiscard = false }, close)
@@ -320,9 +326,9 @@ fun JournalSheet(day: LocalDate, close: () -> Unit, save: suspend (String, Strin
         Column(
             Modifier.fillMaxWidth()
                 .verticalScroll(rememberScrollState())
-                .padding(20.dp)
+                .padding(UiSpacing.edge)
                 .imePadding(),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(UiSpacing.md),
         ) {
             Text(day.toString(), style = MaterialTheme.typography.headlineSmall)
             Field(
@@ -344,8 +350,9 @@ fun JournalSheet(day: LocalDate, close: () -> Unit, save: suspend (String, Strin
             LaunchedEffect(Unit) { bodyFocus.requestFocus() }
             error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                TextButton(onClick = ::dismiss, enabled = !saving) { Text(tr("cancel")) }
+                TextButton(shape = MaterialTheme.shapes.medium, onClick = ::dismiss, enabled = !saving) { Text(tr("cancel")) }
                 Button(
+                    shape = MaterialTheme.shapes.medium,
                     onClick = {
                         saving = true
                         scope.launch {

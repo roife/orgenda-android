@@ -14,7 +14,7 @@ import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
 import androidx.compose.foundation.pager.*
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -219,8 +219,8 @@ fun CalendarScreen(
     val timeline: @Composable () -> Unit = {
         LazyColumn(
             state = list,
-            modifier = Modifier.fillMaxSize().testTag("calendar.timeline"),
-            contentPadding = PaddingValues(bottom = 96.dp),
+            modifier = Modifier.fillMaxSize().testTag("calendar.timeline").orgDragScroll(list, "task"),
+            contentPadding = PaddingValues(bottom = UiSpacing.listBottomWithFab),
         ) {
             sections.forEach { section ->
                 val day = section.date
@@ -236,8 +236,9 @@ fun CalendarScreen(
                 if (day == today && overdue > 0)
                     item(key = "overdue:$day", contentType = "overdue") {
                         TextButton(
+                            shape = MaterialTheme.shapes.medium,
                             onClick = showOverdue,
-                            modifier = Modifier.padding(horizontal = 8.dp),
+                            modifier = Modifier.padding(horizontal = UiSpacing.sm),
                         ) {
                             Text(tr("overdue") + " · $overdue")
                         }
@@ -246,7 +247,7 @@ fun CalendarScreen(
                     item(key = "empty:$day", contentType = "empty") {
                         Text(
                             tr("no_scheduled_items"),
-                            Modifier.padding(horizontal = 16.dp, vertical = 20.dp),
+                            Modifier.padding(horizontal = UiSpacing.edge, vertical = UiSpacing.sectionInset),
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
@@ -254,7 +255,7 @@ fun CalendarScreen(
                     item(key = "all-day:$day", contentType = "label") {
                         Text(
                             tr("all_day"),
-                            Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                            Modifier.padding(horizontal = UiSpacing.edge, vertical = UiSpacing.sm),
                             style = MaterialTheme.typography.labelMedium,
                         )
                     }
@@ -295,6 +296,7 @@ fun CalendarScreen(
             onDismissRequest = { picker = false },
             confirmButton = {
                 TextButton(
+                    shape = MaterialTheme.shapes.medium,
                     onClick = {
                         state.selectedDateMillis?.let { millis ->
                             val day =
@@ -309,7 +311,7 @@ fun CalendarScreen(
                     Text(tr("save"))
                 }
             },
-            dismissButton = { TextButton(onClick = { picker = false }) { Text(tr("cancel")) } },
+            dismissButton = { TextButton(shape = MaterialTheme.shapes.medium, onClick = { picker = false }) { Text(tr("cancel")) } },
         ) {
             DatePicker(state)
         }
@@ -360,9 +362,11 @@ fun CalendarScreen(
         }
         FloatingActionButton(
             onClick = capture,
+            shape = CircleShape,
+            elevation = subtleFabElevation(),
             modifier =
                 Modifier.align(Alignment.BottomEnd)
-                    .padding(16.dp)
+                    .padding(UiSpacing.edge)
                     .testTag("calendar.capture")
                     .semantics {
                         contentDescription = context.label("new_task")
@@ -381,7 +385,7 @@ fun CalendarScreen(
         ) {
             // Keep one accessible button while retaining the journal long press.
             Box(
-                Modifier.size(56.dp)
+                Modifier.size(UiSizes.fab)
                     .combinedClickable(onClick = capture, onLongClick = journal)
                     .clearAndSetSemantics {},
                 contentAlignment = Alignment.Center,
@@ -490,7 +494,7 @@ private fun CalendarPanel(
         (sizing.height(density) - if (density == CalendarDensity.YEAR) 0f else sizing.weekdayHeight)
             .dp
     val displayedDensity = resizing?.let(sizing::nearest) ?: density
-    Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = UiSpacing.edge)) {
         if (resizing != null)
             CalendarResizePreview(resizeSnapshot, resizing!!, marks, sizing) { week ->
                 val dates =
@@ -580,7 +584,7 @@ private fun CalendarPanel(
         val currentSetDensity by rememberUpdatedState<(CalendarDensity) -> Unit>({ setDensity(it) })
         Box(
             Modifier.fillMaxWidth()
-                .height(48.dp)
+                .height(24.dp)
                 .testTag("calendar.densityHandle")
                 .onGloballyPositioned { handleRootY = it.positionInRoot().y }
                 .pointerInput(sizing, minimum) {
@@ -637,7 +641,7 @@ private fun CalendarPanel(
         dropDate?.let {
             Text(
                 tr("scheduled") + ": $it",
-                Modifier.padding(bottom = 8.dp),
+                Modifier.padding(bottom = UiSpacing.sm),
                 color = MaterialTheme.colorScheme.primary,
             )
         }
@@ -722,11 +726,11 @@ private fun DayCell(
                 border =
                     if (today || targeted)
                         BorderStroke(
-                            if (targeted) 2.dp else 1.dp,
+                            if (targeted) UiSizes.activeBorder else UiSizes.border,
                             MaterialTheme.colorScheme.primary,
                         )
                     else null,
-                modifier = Modifier.padding(2.dp),
+                modifier = Modifier.padding(UiSpacing.xxs),
             ) {
                 Column(
                     Modifier.padding(vertical = 3.dp),
@@ -845,11 +849,11 @@ private fun CalendarDayContent(
                 day == selected -> colors.primaryContainer
                 else -> Color.Transparent
             },
-        shape = RoundedCornerShape(lerp(16f, 4f, progress).dp),
+        shape = MaterialTheme.shapes.medium,
         border =
             if (today || targeted)
                 BorderStroke(
-                    if (targeted) 2.dp else 1.dp,
+                    if (targeted) UiSizes.activeBorder else UiSizes.border,
                     colors.primary.copy(alpha = 1 - progress),
                 )
             else null,
@@ -954,9 +958,9 @@ internal fun YearGrid(
 fun JournalCard(entry: JournalEntry, open: () -> Unit) {
     OutlinedCard(
         onClick = open,
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = UiSpacing.edge, vertical = UiSpacing.sm),
     ) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(Modifier.padding(UiSpacing.edge), verticalArrangement = Arrangement.spacedBy(UiSpacing.sm)) {
             Text(
                 entry.date.toLocalTime().toString(),
                 style = MaterialTheme.typography.labelMedium,

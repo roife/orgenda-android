@@ -1,0 +1,7 @@
+<?xml version="1.0"?>
+<resources>
+    <!-- Platform fallback and launcher colors; in-app UI uses the dynamic Material scheme. -->
+    <color name="orgenda_brand">#32694B</color>
+    <color name="orgenda_launcher_foreground">#FFFFFF</color>
+    <color name="orgenda_accent">@color/orgenda_brand</color>
+</resources>

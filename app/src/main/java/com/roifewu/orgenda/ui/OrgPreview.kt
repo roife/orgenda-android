@@ -6,6 +6,7 @@
 package com.roifewu.orgenda.ui
 
 import android.content.Intent
+import android.graphics.Paint
 import android.graphics.Typeface
 import android.net.Uri
 import android.text.*
@@ -14,7 +15,6 @@ import android.text.style.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -26,6 +26,7 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.layout.FirstBaseline
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -33,6 +34,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.roifewu.orgenda.*
 import com.roifewu.orgenda.core.*
@@ -41,6 +43,7 @@ import io.ratex.RaTeXFontLoader
 import io.ratex.RaTeXRenderer
 import io.ratex.RaTeXSpan
 import kotlinx.coroutines.*
+import kotlin.math.roundToInt
 
 private val previewDisclosureWidth = 24.dp
 private val previewStateWidth = 32.dp
@@ -56,6 +59,7 @@ fun OrgPreview(
     editor: EditorState,
     openItem: (OrgHeading) -> Unit,
     complete: (OrgHeading) -> Unit,
+    bottomPadding: Dp = UiSpacing.sectionInset,
 ) {
     var timestampEditorKey by rememberSaveable(editor.session) { mutableStateOf<String?>(null) }
     var stateProposal by remember { mutableStateOf<Pair<OrgHeading, String>?>(null) }
@@ -64,7 +68,14 @@ fun OrgPreview(
         androidx.compose.foundation.text.selection.SelectionContainer {
             Text(
                 editor.text,
-                Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
+                Modifier.fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(
+                        start = UiSpacing.edge,
+                        end = UiSpacing.edge,
+                        top = UiSpacing.edge,
+                        bottom = bottomPadding,
+                    ),
                 style = DocumentTypography.body,
             )
         }
@@ -99,6 +110,16 @@ fun OrgPreview(
             }
         }
     val list = rememberLazyListState()
+    val headingDrag = remember(editor.session) { OutlineDragState() }
+    val visibleHeadings = remember(document, blocks) {
+        val starts = blocks.filter { it.type == "heading" }.mapTo(mutableSetOf()) { it.start }
+        document.headings.filter { it.start in starts }
+    }
+    val headingDrop by remember(visibleHeadings, editor.session) {
+        derivedStateOf {
+            outlineDropAt(headingDrag, list, visibleHeadings, editor.session) { "heading:${it.start}" }
+        }
+    }
     var restoring by remember(editor.session) { mutableStateOf(false) }
     var appliedJumpByte by rememberSaveable(editor.session) { mutableStateOf<Int?>(null) }
     var appliedRevision by rememberSaveable(editor.session) { mutableStateOf<Long?>(null) }
@@ -161,11 +182,19 @@ fun OrgPreview(
     CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides previewControlHeight) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
             LazyColumn(
-                Modifier.widthIn(max = 900.dp).fillMaxSize().testTag("document.preview"),
+                Modifier.widthIn(max = 900.dp).fillMaxSize().testTag("document.preview")
+                    .previewHeadingDrop(headingDrag, list, visibleHeadings, editor.session) { from, target, placement ->
+                        model.moveHeading(from, target, placement)
+                    },
                 state = list,
                 contentPadding =
-                    PaddingValues(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 20.dp),
-                verticalArrangement = Arrangement.spacedBy(2.dp),
+                    PaddingValues(
+                        start = UiSpacing.edge,
+                        end = UiSpacing.edge,
+                        top = UiSpacing.controlGap,
+                        bottom = bottomPadding,
+                    ),
+                verticalArrangement = Arrangement.spacedBy(UiSpacing.xxs),
             ) {
                 items(blocks, key = { "${it.type}:${it.start}" }) { node ->
                     val parent =
@@ -178,18 +207,21 @@ fun OrgPreview(
                         else null
                     val level = if (node.type == "heading") heading?.level ?: 1 else parent?.level
                     val indentation =
-                        (((level ?: 1) - 1).coerceIn(0, 8) * 12).dp +
+                        UiSpacing.outlineIndent * ((level ?: 1) - 1).coerceIn(0, 8) +
                             if (node.type == "heading") 0.dp
                             else parent?.previewContentInset() ?: 0.dp
                     val spacing =
                         when (node.type) {
-                            "heading" -> if (level == 1) 6 else 4
+                            "heading" -> 10
                             "paragraph_group" -> 8
                             "list_item" -> 0
                             else -> 2
                         }
                     Box(
                         Modifier.fillMaxWidth()
+                            .then(if (heading != null) Modifier.headingDropIndicator(
+                                heading, headingDrop?.takeIf { it.target.start == heading.start }?.placement,
+                            ) else Modifier)
                             .padding(
                                 start = indentation,
                                 top = if (node == blocks.firstOrNull()) 0.dp else spacing.dp,
@@ -311,7 +343,21 @@ private fun PreviewBlock(
                 )
                 return
             }
-            val controlHeight = if (item.level == 1) 40.dp else previewControlHeight
+            val controlHeight = UiSizes.icon
+            val titleSize = DocumentTypography.headingSize(item.level, item.isTask)
+            val titleWeight = DocumentTypography.headingWeight(item.isTask).weight
+            val context = LocalContext.current
+            val configuration = LocalConfiguration.current
+            val baselineFromCenter = remember(context, configuration, titleSize, titleWeight) {
+                val metrics = Paint().apply {
+                    textSize = DocumentTypography.scaledDp(context, titleSize) *
+                        context.resources.displayMetrics.density
+                    typeface = Typeface.create(Typeface.DEFAULT, titleWeight, false)
+                }.fontMetrics
+                (-(metrics.ascent + metrics.descent) / 2).roundToInt()
+            }
+            // Share the native title's first baseline instead of estimating a top inset.
+            // Compact visual controls retain Compose's expanded minimum touch target.
             Column(Modifier.fillMaxWidth()) {
                 CompositionLocalProvider(
                     LocalMinimumInteractiveComponentSize provides controlHeight
@@ -319,10 +365,23 @@ private fun PreviewBlock(
                     Row(
                         Modifier.fillMaxWidth()
                             .semantics { heading() }
-                            .orgHeadingDrop(item, editor.session) { source, placement ->
-                                onDrop(source, item, placement)
+                            .orgDrag("heading", HeadingDrag(item, editor.session))
+                            .semantics {
+                                customActions = headingMoveTargets(document, item).mapNotNull { (label, target, position) ->
+                                    target?.let {
+                                        CustomAccessibilityAction(model.app.label(label)) {
+                                            onDrop(item, it, position)
+                                            true
+                                        }
+                                    }
+                                } + if (item.isTask) item.workflow.tokens.map { state ->
+                                    CustomAccessibilityAction(item.workflow.style(state).label.ifEmpty { state }) {
+                                        onState(item, state)
+                                        true
+                                    }
+                                } else emptyList()
                             },
-                        verticalAlignment = Alignment.CenterVertically,
+                        verticalAlignment = Alignment.Top,
                     ) {
                         if (
                             syntax.blocks.any {
@@ -334,7 +393,8 @@ private fun PreviewBlock(
                             IconButton(
                                 onClick = { onToggle(item) },
                                 modifier =
-                                    Modifier.width(previewDisclosureWidth).height(controlHeight),
+                                    Modifier.alignBy { it.measuredHeight / 2 + baselineFromCenter }
+                                        .width(previewDisclosureWidth).height(controlHeight),
                             ) {
                                 Icon(
                                     if (keys[item.start] in collapsed) Icons.Default.ChevronRight
@@ -342,7 +402,7 @@ private fun PreviewBlock(
                                     tr(
                                         if (keys[item.start] in collapsed) "expand" else "collapse"
                                     ) + " " + item.title,
-                                    tint = mutedControlColor(),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
                         else Spacer(Modifier.width(previewDisclosureWidth))
@@ -352,7 +412,8 @@ private fun PreviewBlock(
                                 onClick = { complete(item) },
                                 enabled = item.canComplete,
                                 modifier =
-                                    Modifier.width(previewStateWidth)
+                                    Modifier.alignBy { it.measuredHeight / 2 + baselineFromCenter }
+                                        .width(previewStateWidth)
                                         .height(controlHeight)
                                         .semantics {
                                             contentDescription = stateDescriptionText
@@ -368,18 +429,16 @@ private fun PreviewBlock(
                             Checkbox(
                                 item.done,
                                 { complete(item) },
-                                Modifier.width(previewStateWidth).height(controlHeight).semantics {
+                                Modifier.alignBy { it.measuredHeight / 2 + baselineFromCenter }
+                                    .width(previewStateWidth).height(controlHeight).semantics {
                                     contentDescription = item.title
                                 },
                             )
                         Column(
                             Modifier.weight(1f)
-                                .padding(vertical = if (item.level == 1) 2.dp else 4.dp)
+                                .alignBy(FirstBaseline)
                                 .testTag("preview.heading.title.${item.start}")
-                                .combinedClickable(
-                                    onClick = { openItem(item) },
-                                    onLongClick = { openItem(item) },
-                                )
+                                .clickable { openItem(item) }
                         ) {
                             val titleNode =
                                 syntax.children(node).firstOrNull { it.type == "heading_title" }
@@ -395,11 +454,12 @@ private fun PreviewBlock(
                                     titleNode,
                                     model,
                                     editor.file.path,
-                                    textSize = DocumentTypography.headingSize(item.level),
+                                    textSize = titleSize,
                                     query = searchQuery,
                                     foregroundOverride =
                                         if (item.isTask) workflowColor(item).toArgb() else null,
-                                    fontWeight = if (item.level == 1) 700 else 600,
+                                    fontWeight = titleWeight,
+                                    headingDrag = HeadingDrag(item, editor.session),
                                     visibleStart = item.titleStart,
                                     visibleEnd = item.titleEnd,
                                     activate =
@@ -408,59 +468,43 @@ private fun PreviewBlock(
                                             { openItem(item) }
                                         },
                                 )
-                            else Text(item.title, style = DocumentTypography.heading(item.level))
+                            else Text(item.title, style = DocumentTypography.heading(item.level, item.isTask))
+                            if (item.priority.isNotEmpty() || item.tags.isNotEmpty())
+                                FlowRow(
+                                    Modifier.padding(top = UiSpacing.xxs)
+                                        .clickable { openItem(item) },
+                                    horizontalArrangement = Arrangement.spacedBy(UiSpacing.sm),
+                                    verticalArrangement = Arrangement.spacedBy(UiSpacing.xxs),
+                                ) {
+                                    if (item.priority.isNotEmpty())
+                                        Surface(
+                                            color = MaterialTheme.colorScheme.surfaceContainer,
+                                            shape = MaterialTheme.shapes.extraSmall,
+                                        ) {
+                                            Text(
+                                                highlightedText(item.priority, searchQuery),
+                                                Modifier.padding(horizontal = UiSpacing.priorityLabelHorizontal, vertical = UiSpacing.xxs),
+                                                style =
+                                                    DocumentTypography.caption.copy(
+                                                        fontWeight =
+                                                            androidx.compose.ui.text.font.FontWeight.Medium
+                                                    ),
+                                            )
+                                        }
+                                    if (item.tags.isNotEmpty())
+                                        Text(
+                                            highlightedText(
+                                                item.tags.joinToString("  ") { "#$it" },
+                                                searchQuery,
+                                            ),
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            style = DocumentTypography.metadata,
+                                        )
+                                }
                         }
-                        Box(Modifier.width(48.dp), contentAlignment = Alignment.Center) {
-                            HeadingMoveMenu(
-                                model,
-                                document,
-                                item,
-                                editor.session,
-                                setState =
-                                    if (item.isTask) { state -> onState(item, state) } else null,
-                            )
-                        }
+
                     }
                 }
-                if (item.priority.isNotEmpty() || item.tags.isNotEmpty())
-                    FlowRow(
-                        Modifier.padding(
-                                start = item.previewContentInset(),
-                                end = 48.dp,
-                                bottom = 4.dp,
-                            )
-                            .combinedClickable(
-                                onClick = { openItem(item) },
-                                onLongClick = { openItem(item) },
-                            ),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(2.dp),
-                    ) {
-                        if (item.priority.isNotEmpty())
-                            Surface(
-                                color = MaterialTheme.colorScheme.surfaceContainer,
-                                shape = MaterialTheme.shapes.extraSmall,
-                            ) {
-                                Text(
-                                    highlightedText(item.priority, searchQuery),
-                                    Modifier.padding(horizontal = 5.dp, vertical = 2.dp),
-                                    style =
-                                        DocumentTypography.caption.copy(
-                                            fontWeight =
-                                                androidx.compose.ui.text.font.FontWeight.Medium
-                                        ),
-                                )
-                            }
-                        if (item.tags.isNotEmpty())
-                            Text(
-                                highlightedText(
-                                    item.tags.joinToString("  ") { "#$it" },
-                                    searchQuery,
-                                ),
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                style = DocumentTypography.subheadline,
-                            )
-                    }
                 if (item.habit)
                     Box(Modifier.fillMaxWidth().padding(start = item.previewContentInset())) {
                         HabitHistory(item)
@@ -468,7 +512,7 @@ private fun PreviewBlock(
             }
         }
         "planning" -> {
-            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(UiSpacing.controlGap)) {
                 syntax
                     .children(node)
                     .filter { it.type == "planning_entry" }
@@ -498,20 +542,20 @@ private fun PreviewBlock(
             Surface(
                 color =
                     if (comment) MaterialTheme.colorScheme.surface
-                    else MaterialTheme.colorScheme.primary.copy(alpha = 0.06f),
-                shape = if (comment) MaterialTheme.shapes.small else RoundedCornerShape(6.dp),
+                    else uiColors().drawerContainer,
+                shape = MaterialTheme.shapes.small,
                 modifier =
                     if (comment) Modifier
                     else Modifier.fillMaxWidth().testTag("document.drawer.${node.start}"),
             ) {
-                Column(Modifier.padding(horizontal = 6.dp)) {
+                Column(Modifier.padding(horizontal = UiSpacing.controlGap)) {
                     if (comment)
-                        TextButton(onClick = { expanded = !expanded }) {
+                        TextButton(shape = MaterialTheme.shapes.medium, onClick = { expanded = !expanded }) {
                             Icon(
                                 if (expanded) Icons.Default.ExpandMore
                                 else Icons.Default.ChevronRight,
                                 null,
-                                tint = mutedControlColor(),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                             Text(
                                 highlightedText(tr("comment"), searchQuery),
@@ -525,16 +569,16 @@ private fun PreviewBlock(
                                 .clickable(onClickLabel = drawerState, role = Role.Button) {
                                     expanded = !expanded
                                 }
-                                .padding(vertical = 2.dp),
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                .padding(vertical = UiSpacing.xxs),
+                            horizontalArrangement = Arrangement.spacedBy(UiSpacing.xs),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Icon(
                                 if (expanded) Icons.Default.ExpandMore
                                 else Icons.Default.ChevronRight,
                                 null,
-                                Modifier.size(16.dp),
-                                tint = mutedControlColor(),
+                                Modifier.size(UiSizes.iconSmall),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                             Text(
                                 highlightedText(drawerName, searchQuery),
@@ -550,7 +594,7 @@ private fun PreviewBlock(
                                     top = 2.dp,
                                     bottom = 6.dp,
                                 ),
-                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalArrangement = Arrangement.spacedBy(UiSpacing.xs),
                         ) {
                             if (comment) {
                                 val content =
@@ -594,7 +638,7 @@ private fun PreviewBlock(
                                                     if (
                                                         index > 0 && child.type == "paragraph_group"
                                                     )
-                                                        8.dp
+                                                        UiSpacing.sm
                                                     else 0.dp
                                             )
                                         ) {
@@ -621,7 +665,7 @@ private fun PreviewBlock(
             }
         }
         "property" ->
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(UiSpacing.xxs)) {
                 syntax
                     .children(node)
                     .firstOrNull { it.type == "property_name" }
@@ -745,7 +789,7 @@ private fun PreviewBlock(
                 shape = MaterialTheme.shapes.medium,
             ) {
                 Column(
-                    Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp)
+                    Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = UiSpacing.md)
                 ) {
                     rows.forEach { row ->
                         if (row.type == "table_separator")
@@ -783,7 +827,7 @@ private fun PreviewBlock(
         }
         "horizontal_rule" -> HorizontalDivider()
         "list" ->
-            Column(verticalArrangement = Arrangement.spacedBy(if (readOnly) 4.dp else 0.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(if (readOnly) UiSpacing.xs else 0.dp)) {
                 syntax
                     .children(node)
                     .filter { it.type == "list_item" }
@@ -827,13 +871,13 @@ private fun PreviewBlock(
                     Modifier.fillMaxWidth().semantics(mergeDescendants = true) {
                         contentDescription = states
                     },
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(UiSpacing.sm),
                     verticalAlignment = Alignment.Top,
                 ) {
                     val previous = log.groupValues[2]
                     if (previous.isNotEmpty()) {
                         WorkflowIcon(document.workflow, previous)
-                        Icon(Icons.Default.ArrowForward, null, Modifier.size(16.dp))
+                        Icon(Icons.Default.ArrowForward, null, Modifier.size(UiSizes.iconSmall))
                     }
                     val current = log.groupValues[1]
                     WorkflowIcon(document.workflow, current)
@@ -917,10 +961,19 @@ private fun PreviewBlock(
                     Text(
                         checkbox?.let(syntax::text)?.trim()
                             ?: marker?.let(syntax::text)?.trim().orEmpty().let {
-                                if (readOnly && it in listOf("-", "+", "*")) "•" else it
+                                when (it) {
+                                    "-" -> "•"
+                                    "+" -> "◦"
+                                    "*" -> "▪"
+                                    else -> it
+                                }
                             },
-                        Modifier.widthIn(min = 28.dp).padding(end = 7.dp),
+                        Modifier.alignByBaseline()
+                            .widthIn(min = 20.dp)
+                            .padding(end = UiSpacing.sm)
+                            .testTag("preview.list.marker.${item.start}"),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.End,
                         style =
                             DocumentTypography.subheadline.copy(
                                 fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold
@@ -928,6 +981,7 @@ private fun PreviewBlock(
                     )
                 Box(
                     Modifier.weight(1f)
+                        .alignByBaseline()
                         .padding(top = if (checkbox != null && !readOnly) textInset else 0.dp)
                 ) {
                     RichOrgText(
@@ -970,7 +1024,7 @@ private fun PreviewBlock(
             else
                 Text(
                     highlightedText(source.trimEnd(), searchQuery),
-                    style = DocumentTypography.subheadline,
+                    style = DocumentTypography.metadata,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
         "custom_block",
@@ -984,7 +1038,7 @@ private fun PreviewBlock(
             ) {
                 Column(
                     Modifier.fillMaxWidth().padding(if (custom) 10.dp else 0.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalArrangement = Arrangement.spacedBy(UiSpacing.xs),
                 ) {
                     if (custom)
                         Text(
@@ -1098,7 +1152,7 @@ private fun PreviewBlock(
                 horizontalAlignment =
                     if (centered) Alignment.CenterHorizontally else Alignment.Start,
                 verticalArrangement =
-                    Arrangement.spacedBy(if (node.type == "verse_block") 4.dp else 12.dp),
+                    Arrangement.spacedBy(if (node.type == "verse_block") UiSpacing.xs else UiSpacing.md),
             ) {
                 content.forEach { child ->
                     if (child.type == "latex_block") Formula(syntax.text(child))
@@ -1187,7 +1241,7 @@ private fun Formula(source: String) {
         }
     Box(
         Modifier.fillMaxWidth()
-            .padding(vertical = 4.dp)
+            .padding(vertical = UiSpacing.xs)
             .horizontalScroll(rememberScrollState())
             .semantics { contentDescription = expression }
     ) {
@@ -1223,6 +1277,7 @@ private fun RichOrgText(
     trimSpaces: Boolean = false,
     italic: Boolean = false,
     fontWeight: Int = 400,
+    headingDrag: HeadingDrag? = null,
 ) {
     val currentEditor by model.editor.collectAsState()
     val document = currentEditor?.document?.takeIf { it.text == syntax.source.text }
@@ -1235,7 +1290,7 @@ private fun RichOrgText(
             else emptyList()
         }
     if (images.isNotEmpty() && document != null) {
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(UiSpacing.sm)) {
             var cursor = visibleStart
             images.forEach { image ->
                 if (image.start > cursor && syntax.source.slice(cursor, image.start).isNotBlank())
@@ -1258,6 +1313,7 @@ private fun RichOrgText(
                         trimSpaces,
                         italic,
                         fontWeight,
+                        headingDrag,
                     )
                 PreviewImage(model, document, image)
                 cursor = image.end
@@ -1282,6 +1338,7 @@ private fun RichOrgText(
                     trimSpaces,
                     italic,
                     fontWeight,
+                    headingDrag,
                 )
         }
         return
@@ -1291,6 +1348,7 @@ private fun RichOrgText(
         rememberSaveable(path, node.start, node.end) { mutableStateOf<String?>(null) }
     val foreground = foregroundOverride ?: MaterialTheme.colorScheme.onSurface.toArgb()
     val linkColor = MaterialTheme.colorScheme.primary.toArgb()
+    val searchHighlight = uiColors().searchHighlight
     val configuration = LocalConfiguration.current
     val size =
         remember(context, textSize, configuration) {
@@ -1303,6 +1361,7 @@ private fun RichOrgText(
             node.start,
             foreground,
             linkColor,
+            searchHighlight,
             size,
             query,
             visibleStart,
@@ -1597,14 +1656,7 @@ private fun RichOrgText(
                             output.length,
                             Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
                         )
-                    SearchText.ranges(output.toString(), query).forEach { match ->
-                        output.setSpan(
-                            BackgroundColorSpan(0x66ffca28),
-                            match.first,
-                            match.last + 1,
-                            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
-                        )
-                    }
+                    searchHighlight.applyTo(output, query)
                     output
                 }
         }
@@ -1617,13 +1669,16 @@ private fun RichOrgText(
         it.textSize = textSize
         it.typeface = Typeface.create(Typeface.DEFAULT, fontWeight, italic)
         it.setLineSpacing(6f * it.resources.displayMetrics.density, 1f)
-        if (activate != null) {
+        if (activate != null || headingDrag != null) {
             it.setTextIsSelectable(false)
-            it.setOnClickListener { activate() }
+            it.setOnClickListener { activate?.invoke() }
         } else {
             it.setOnClickListener(null)
             it.setTextIsSelectable(true)
         }
+        it.setOnLongClickListener(if (headingDrag != null) android.view.View.OnLongClickListener { view ->
+            view.startOrgDrag("heading", headingDrag)
+        } else null)
         it.movementMethod = LinkMovementMethod.getInstance()
         it.gravity =
             if (centered) android.view.Gravity.CENTER_HORIZONTAL else android.view.Gravity.START
@@ -1637,11 +1692,13 @@ private fun RichOrgText(
 
 @Composable
 private fun CodeBlock(source: String, language: String, query: String, label: String) {
-    val foreground = MaterialTheme.colorScheme.onSurface.toArgb()
-    val accent = MaterialTheme.colorScheme.primary.toArgb()
-    val secondary = MaterialTheme.colorScheme.secondary.toArgb()
-    val tertiary = MaterialTheme.colorScheme.tertiary.toArgb()
-    val muted = MaterialTheme.colorScheme.onSurfaceVariant.toArgb()
+    val colors = uiColors()
+    val foreground = colors.sourceForeground
+    val accent = colors.sourceAccent
+    val secondary = colors.sourceSecondary
+    val tertiary = colors.sourceCodeAccent
+    val muted = colors.sourceMuted
+    val searchHighlight = colors.searchHighlight
     val text by
         produceState<CharSequence>(
             source,
@@ -1651,6 +1708,7 @@ private fun CodeBlock(source: String, language: String, query: String, label: St
             secondary,
             tertiary,
             muted,
+            searchHighlight,
             query,
         ) {
             value =
@@ -1658,26 +1716,17 @@ private fun CodeBlock(source: String, language: String, query: String, label: St
                     SpannableString(
                             CodeHighlight.text(source, language, accent, secondary, tertiary, muted)
                         )
-                        .apply {
-                            SearchText.ranges(source, query).forEach { match ->
-                                setSpan(
-                                    BackgroundColorSpan(0x66ffca28),
-                                    match.first,
-                                    match.last + 1,
-                                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
-                                )
-                            }
-                        }
+                        .apply { searchHighlight.applyTo(this, query) }
                 }
         }
     Surface(
-        modifier = Modifier.padding(vertical = 4.dp),
+        modifier = Modifier.padding(vertical = UiSpacing.xs),
         color = MaterialTheme.colorScheme.surfaceContainer,
         shape = MaterialTheme.shapes.medium,
     ) {
         Column(
-            Modifier.fillMaxWidth().padding(8.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
+            Modifier.fillMaxWidth().padding(UiSpacing.sm),
+            verticalArrangement = Arrangement.spacedBy(UiSpacing.xs),
         ) {
             if (label.isNotEmpty())
                 Text(
@@ -1703,12 +1752,12 @@ private fun highlightedText(
     source: String,
     query: String,
 ): androidx.compose.ui.text.AnnotatedString {
-    val color = MaterialTheme.colorScheme.tertiaryContainer
+    val colors = uiColors().searchHighlight
     return androidx.compose.ui.text.buildAnnotatedString {
         append(source)
         SearchText.ranges(source, query).forEach { match ->
             addStyle(
-                androidx.compose.ui.text.SpanStyle(background = color),
+                androidx.compose.ui.text.SpanStyle(background = colors.background, color = colors.foreground),
                 match.first,
                 match.last + 1,
             )

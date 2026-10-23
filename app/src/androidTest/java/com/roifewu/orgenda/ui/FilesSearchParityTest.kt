@@ -170,15 +170,15 @@ class FilesSearchParityTest {
         var folder by mutableStateOf("root")
         compose.setContent {
             MaterialTheme {
-                FileFolderList(folder, Modifier.fillMaxWidth().height(200.dp)) {
-                    items(100) { Text("$folder $it", Modifier.height(48.dp)) }
+                FileFolderList(folder, Modifier.fillMaxWidth().height(200.dp)) { shownFolder ->
+                    items(100) { Text("$shownFolder $it", Modifier.height(48.dp)) }
                 }
             }
         }
         compose.onNodeWithTag("files.browser").performScrollToIndex(40)
         compose.onNodeWithText("root 40").assertIsDisplayed()
-        compose.runOnIdle { folder = "child" }
-        compose.onNodeWithText("child 0").assertIsDisplayed()
+        compose.runOnIdle { folder = "root/child" }
+        compose.onNodeWithText("root/child 0").assertIsDisplayed()
         compose.runOnIdle { folder = "root" }
         compose.onNodeWithText("root 40").assertIsDisplayed()
     }

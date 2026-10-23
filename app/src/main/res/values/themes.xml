@@ -1,7 +1,6 @@
 <?xml version="1.0"?>
 <resources>
     <bool name="orgenda_light_system_bars">true</bool>
-    <color name="orgenda_accent">#32694B</color>
     <style name="Theme.Orgenda" parent="Theme.AppCompat.DayNight.NoActionBar">
         <item name="android:fontFamily">sans</item>
         <item name="android:windowLightStatusBar">@bool/orgenda_light_system_bars</item>

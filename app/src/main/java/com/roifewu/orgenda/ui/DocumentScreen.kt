@@ -3,6 +3,7 @@
 package com.roifewu.orgenda.ui
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material.icons.filled.*
@@ -10,11 +11,12 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.roifewu.orgenda.*
 import com.roifewu.orgenda.core.*
@@ -43,22 +45,15 @@ fun DocumentScreen(
             model.editorHistories.getOrPut(editor.session) { EditorHistory() }
         }
     val modeState = key(editor.session) { rememberSaveableStateHolder() }
-    val textColor = MaterialTheme.colorScheme.onSurface.toArgb()
-    val accent = MaterialTheme.colorScheme.primary.toArgb()
-    val codeAccent = MaterialTheme.colorScheme.tertiary.toArgb()
+    val contentBottomPadding = UiSpacing.documentBottomWithFab
+    val editorBottomPadding = with(LocalDensity.current) { contentBottomPadding.roundToPx() }
+    val colors = uiColors()
+    val textColor = colors.sourceForeground
+    val accent = colors.sourceAccent
+    val codeAccent = colors.sourceCodeAccent
     val workflow =
         editor.document?.workflow ?: model.workspace.collectAsState().value.configuration.workflow
-    val syntaxColors = buildMap {
-        put("muted", MaterialTheme.colorScheme.onSurfaceVariant.toArgb())
-        put("secondary", MaterialTheme.colorScheme.secondary.toArgb())
-        put("surface", MaterialTheme.colorScheme.surfaceContainer.toArgb())
-        put("tag", MaterialTheme.colorScheme.secondaryContainer.toArgb())
-        for (name in listOf("red", "orange", "blue", "green")) put(
-            name,
-            workflowColor(name).toArgb(),
-        )
-        for (token in workflow.tokens) put("state:$token", workflowColor(workflow, token).toArgb())
-    }
+    val syntaxColors = colors.sourceSyntax(workflow)
     val context = LocalContext.current
     val pageActive by rememberUpdatedState(LocalPageActive.current)
     fun suspendEditor() {
@@ -133,49 +128,6 @@ fun DocumentScreen(
                 }
             },
             actions = {
-                if (androidx.compose.ui.platform.LocalConfiguration.current.fontScale >= 1.5f) {
-                    var modes by remember { mutableStateOf(false) }
-                    Box {
-                        TextButton(onClick = { modes = true }) {
-                            Text(tr(if (editor.preview) "preview" else "edit"))
-                            Icon(Icons.Default.ArrowDropDown, null, tint = mutedControlColor())
-                        }
-                        DropdownMenu(modes, { modes = false }) {
-                            DropdownMenuItem(
-                                text = { Text(tr("edit")) },
-                                onClick = {
-                                    modes = false
-                                    switchMode(false)
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = { Text(tr("preview")) },
-                                onClick = {
-                                    modes = false
-                                    switchMode(true)
-                                },
-                            )
-                        }
-                    }
-                } else
-                    SingleChoiceSegmentedButtonRow {
-                        SegmentedButton(
-                            !editor.preview,
-                            { switchMode(false) },
-                            shape = SegmentedButtonDefaults.itemShape(0, 2),
-                            icon = {},
-                        ) {
-                            Text(tr("edit"), maxLines = 1)
-                        }
-                        SegmentedButton(
-                            editor.preview,
-                            { switchMode(true) },
-                            shape = SegmentedButtonDefaults.itemShape(1, 2),
-                            icon = {},
-                        ) {
-                            Text(tr("preview"), maxLines = 1)
-                        }
-                    }
                 IconButton(
                     onClick = {
                         suspendEditor()
@@ -192,7 +144,7 @@ fun DocumentScreen(
         )
         editor.error?.let { message ->
             Row(
-                Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+                Modifier.fillMaxWidth().padding(horizontal = UiSpacing.edge),
                 verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
             ) {
                 Text(
@@ -200,7 +152,7 @@ fun DocumentScreen(
                     Modifier.weight(1f),
                     color = MaterialTheme.colorScheme.error,
                 )
-                TextButton(onClick = { model.flush() }, enabled = !editor.saving) {
+                TextButton(shape = MaterialTheme.shapes.medium, onClick = { model.flush() }, enabled = !editor.saving) {
                     Text(tr("retry"))
                 }
             }
@@ -208,7 +160,7 @@ fun DocumentScreen(
         Box(Modifier.weight(1f).fillMaxWidth()) {
             if (editor.preview)
                 modeState.SaveableStateProvider("preview") {
-                    OrgPreview(model, editor, openItem, complete)
+                    OrgPreview(model, editor, openItem, complete, bottomPadding = contentBottomPadding)
                 }
             else
                 modeState.SaveableStateProvider("edit") {
@@ -218,6 +170,12 @@ fun DocumentScreen(
                         AndroidView(
                             factory = { ctx ->
                                 NativeSourceEditor(ctx, history).also { view ->
+                                    view.setPadding(
+                                        view.paddingLeft,
+                                        view.paddingTop,
+                                        view.paddingRight,
+                                        editorBottomPadding,
+                                    )
                                     val restoring =
                                         appliedJumpByte == editor.jumpByte &&
                                             appliedRevision == editor.navigationRevision
@@ -281,6 +239,20 @@ fun DocumentScreen(
                         )
                     }
                 }
+            FloatingActionButton(
+                onClick = { switchMode(!editor.preview) },
+                shape = CircleShape,
+                modifier =
+                    Modifier.align(Alignment.BottomEnd)
+                        .padding(UiSpacing.edge)
+                        .testTag("document.mode"),
+                elevation = subtleFabElevation(),
+            ) {
+                Icon(
+                    if (editor.preview) Icons.Default.Edit else Icons.Default.Visibility,
+                    tr(if (editor.preview) "edit" else "preview"),
+                )
+            }
         }
         if (!editor.preview)
             Row(
@@ -331,6 +303,7 @@ fun DocumentScreen(
             onDismissRequest = ::closeDate,
             confirmButton = {
                 TextButton(
+                    shape = MaterialTheme.shapes.medium,
                     onClick = {
                         dateState.selectedDateMillis?.let { millis ->
                             native
@@ -353,13 +326,13 @@ fun DocumentScreen(
                     Text(tr("insert"))
                 }
             },
-            dismissButton = { TextButton(onClick = ::closeDate) { Text(tr("cancel")) } },
+            dismissButton = { TextButton(shape = MaterialTheme.shapes.medium, onClick = ::closeDate) { Text(tr("cancel")) } },
         ) {
             Column {
                 if (!sourceUnchanged)
                     Text(
                         tr("date_source_changed"),
-                        Modifier.padding(16.dp),
+                        Modifier.padding(UiSpacing.edge),
                         color = MaterialTheme.colorScheme.error,
                     )
                 DatePicker(dateState)

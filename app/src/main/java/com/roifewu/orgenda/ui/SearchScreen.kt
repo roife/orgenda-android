@@ -3,6 +3,9 @@ package com.roifewu.orgenda.ui
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -19,10 +22,16 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.*
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.roifewu.orgenda.OrgendaViewModel
 import com.roifewu.orgenda.core.*
@@ -238,15 +247,18 @@ fun SearchScreen(
         history = (listOf(clean) + history).distinct().take(12)
         preferences.edit().putString("recent", history.joinToString("\n")).apply()
     }
-    val response = completed
+    // Keep results during a background refresh, but never show a different query or scope.
+    val response = completed?.takeIf {
+        it.request.query == request.query && it.request.scope == request.scope
+    }
     val loading = response?.request != request
     Column(Modifier.fillMaxSize()) {
         TextField(
             query,
             { query = it },
             Modifier.fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp)
-                .heightIn(min = 56.dp)
+                .padding(horizontal = UiSpacing.edge, vertical = UiSpacing.sm)
+                .heightIn(min = UiSizes.textFieldMinHeight)
                 .focusRequester(focusRequester)
                 .testTag("search.query")
                 .semantics { contentDescription = context.label("search_hint") },
@@ -274,28 +286,7 @@ fun SearchScreen(
                     IconButton(onClick = { query = "" }) { Icon(Icons.Default.Close, tr("clear")) }
             },
         )
-        Row(
-            Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            listOf("all", "tasks", "journal", "calendar", "files", "settings").forEach { key ->
-                FilterChip(
-                    scope == key,
-                    { scope = key },
-                    label = { Text(tr(key)) },
-                    leadingIcon =
-                        if (scope == key) {
-                            {
-                                Icon(
-                                    Icons.Default.Check,
-                                    null,
-                                    Modifier.size(FilterChipDefaults.IconSize),
-                                )
-                            }
-                        } else null,
-                )
-            }
-        }
+        SearchScopeChips(scope) { scope = it }
         if (request.query.isEmpty()) {
             val tags =
                 if (scope in listOf("all", "tasks", "calendar"))
@@ -332,16 +323,17 @@ fun SearchScreen(
             } else
                 LazyColumn(
                     Modifier.fillMaxWidth().weight(1f),
-                    contentPadding = PaddingValues(bottom = 24.dp),
+                    contentPadding = PaddingValues(bottom = UiSpacing.xl),
                 ) {
                     if (history.isNotEmpty()) {
                         item {
                             Row(
-                                Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                                Modifier.fillMaxWidth().padding(horizontal = UiSpacing.edge),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 Text(tr("recent_searches"), Modifier.weight(1f))
                                 TextButton(
+                                    shape = MaterialTheme.shapes.medium,
                                     onClick = {
                                         history = emptyList()
                                         preferences.edit().remove("recent").apply()
@@ -364,10 +356,10 @@ fun SearchScreen(
                             Text(
                                 tr("try_tag"),
                                 Modifier.padding(
-                                    start = 16.dp,
-                                    end = 16.dp,
-                                    top = 20.dp,
-                                    bottom = 8.dp,
+                                    start = UiSpacing.edge,
+                                    end = UiSpacing.edge,
+                                    top = UiSpacing.sectionInset,
+                                    bottom = UiSpacing.sm,
                                 ),
                                 style = MaterialTheme.typography.titleSmall,
                             )
@@ -375,8 +367,8 @@ fun SearchScreen(
                         item {
                             Row(
                                 Modifier.horizontalScroll(rememberScrollState())
-                                    .padding(horizontal = 16.dp),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    .padding(horizontal = UiSpacing.edge),
+                                horizontalArrangement = Arrangement.spacedBy(UiSpacing.sm),
                             ) {
                                 tags.forEach { (tag, _) ->
                                     SuggestionChip(
@@ -392,10 +384,10 @@ fun SearchScreen(
                             Text(
                                 tr("recent_journals"),
                                 Modifier.padding(
-                                    start = 16.dp,
-                                    end = 16.dp,
-                                    top = 20.dp,
-                                    bottom = 8.dp,
+                                    start = UiSpacing.edge,
+                                    end = UiSpacing.edge,
+                                    top = UiSpacing.sectionInset,
+                                    bottom = UiSpacing.sm,
                                 ),
                                 style = MaterialTheme.typography.titleSmall,
                             )
@@ -423,10 +415,10 @@ fun SearchScreen(
                             Text(
                                 tr("browse_files"),
                                 Modifier.padding(
-                                    start = 16.dp,
-                                    end = 16.dp,
-                                    top = 20.dp,
-                                    bottom = 8.dp,
+                                    start = UiSpacing.edge,
+                                    end = UiSpacing.edge,
+                                    top = UiSpacing.sectionInset,
+                                    bottom = UiSpacing.sm,
                                 ),
                                 style = MaterialTheme.typography.titleSmall,
                             )
@@ -461,29 +453,10 @@ fun SearchScreen(
         } else if (response?.hits?.isNotEmpty() == true)
             LazyColumn(
                 Modifier.fillMaxWidth().weight(1f),
-                contentPadding = PaddingValues(bottom = 24.dp),
+                contentPadding = PaddingValues(bottom = UiSpacing.xl),
             ) {
                 item {
-                    Row(
-                        Modifier.fillMaxWidth().padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        Text(
-                            tr(
-                                if (response.request.scope == "all") "all_results"
-                                else response.request.scope
-                            ),
-                            Modifier.weight(1f),
-                            style = MaterialTheme.typography.titleSmall,
-                        )
-                        if (loading)
-                            CircularProgressIndicator(
-                                Modifier.size(20.dp).testTag("search.loading"),
-                                strokeWidth = 2.dp,
-                            )
-                        Text(response.hits.size.toString() + " " + tr("results_found"))
-                    }
+                    SearchResultsSummary(response.request.scope, response.hits.size, loading)
                 }
                 items(response.hits, key = { it.id }) { hit ->
                     SearchResultItem(hit, response.request.query) {
@@ -505,7 +478,7 @@ fun SearchScreen(
             Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(UiSpacing.md),
                 ) {
                     CircularProgressIndicator(Modifier.testTag("search.loading"))
                     Text(tr("searching"))
@@ -513,11 +486,15 @@ fun SearchScreen(
             }
         else if (response?.error != null)
             Column(
-                Modifier.fillMaxWidth().padding(24.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                Modifier.fillMaxWidth().padding(horizontal = UiSpacing.edge, vertical = UiSpacing.xl),
+                verticalArrangement = Arrangement.spacedBy(UiSpacing.md),
             ) {
-                Text(response.error, color = MaterialTheme.colorScheme.error)
-                Button(onClick = { retry++ }) { Text(tr("retry")) }
+                Text(
+                    response.error,
+                    Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                    color = MaterialTheme.colorScheme.error,
+                )
+                Button(shape = MaterialTheme.shapes.medium, onClick = { retry++ }) { Text(tr("retry")) }
             }
         else
             SearchEmptyContent(
@@ -538,6 +515,80 @@ fun SearchScreen(
     editing?.let { ItemEditorSheet(model, it) { editing = null } }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+internal fun SearchScopeChips(scope: String, onChange: (String) -> Unit) {
+    val options = listOf("all", "tasks", "journal", "calendar", "files", "settings")
+    Row(
+        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
+            .selectableGroup().padding(horizontal = UiSpacing.edge).testTag("search.scopes"),
+        horizontalArrangement = Arrangement.spacedBy(UiSpacing.sm),
+    ) {
+        options.forEach { option ->
+            val requester = remember { BringIntoViewRequester() }
+            LaunchedEffect(scope) {
+                if (scope == option) {
+                    withFrameNanos { }
+                    requester.bringIntoView()
+                }
+            }
+            FilterChip(
+                selected = scope == option,
+                onClick = { onChange(option) },
+                modifier = Modifier.testTag("search.scope.$option")
+                    .bringIntoViewRequester(requester)
+                    .semantics { role = Role.RadioButton },
+                label = { Text(tr(if (option == "journal") "search_journal" else option)) },
+                leadingIcon =
+                    if (scope == option) {
+                        {
+                            Icon(
+                                Icons.Default.Check,
+                                null,
+                                Modifier.size(FilterChipDefaults.IconSize),
+                            )
+                        }
+                    } else null,
+            )
+        }
+    }
+}
+
+@Composable
+internal fun SearchResultsSummary(scope: String, count: Int, refreshing: Boolean) {
+    Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerLow)) {
+        FlowRow(
+            Modifier.fillMaxWidth().padding(UiSpacing.edge)
+                .semantics(mergeDescendants = true) {
+                    heading()
+                    liveRegion = LiveRegionMode.Polite
+                }
+                .testTag("search.summary"),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalArrangement = Arrangement.spacedBy(UiSpacing.sm),
+        ) {
+            Text(
+                tr(
+                    when (scope) {
+                        "all" -> "all_results"
+                        "journal" -> "search_journal"
+                        else -> scope
+                    }
+                ),
+                Modifier.padding(end = UiSpacing.lg),
+                style = MaterialTheme.typography.titleSmall,
+            )
+            Text(
+                count.toString() + " " + tr("results_found"),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        if (refreshing)
+            LinearProgressIndicator(Modifier.fillMaxWidth().testTag("search.loading"))
+    }
+}
+
 @Composable
 internal fun SearchEmptyContent(
     scope: String,
@@ -546,19 +597,31 @@ internal fun SearchEmptyContent(
     onClear: () -> Unit,
 ) {
     Column(
-        Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(32.dp),
+        Modifier.fillMaxWidth()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = UiSpacing.edge, vertical = UiSpacing.xxl),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+        verticalArrangement = Arrangement.spacedBy(UiSpacing.lg),
     ) {
-        Icon(
-            Icons.Default.Search,
-            null,
-            Modifier.size(40.dp),
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        Surface(
+            color = MaterialTheme.colorScheme.secondaryContainer,
+            contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+            shape = MaterialTheme.shapes.extraLarge,
+        ) {
+            Icon(
+                if (guidance) Icons.Default.Search else Icons.Default.SearchOff,
+                null,
+                Modifier.padding(UiSpacing.lg).size(UiSizes.icon),
+            )
+        }
         Text(
             tr(if (guidance) "start_search" else "no_results"),
+            Modifier.semantics {
+                heading()
+                if (!guidance) liveRegion = LiveRegionMode.Polite
+            },
             style = MaterialTheme.typography.titleMedium,
+            textAlign = TextAlign.Center,
         )
         Text(
             tr(
@@ -566,13 +629,22 @@ internal fun SearchEmptyContent(
                 else if (scope == "all") "search_no_matches_hint" else "search_scope_hint"
             ),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
         )
         if (scope != "all")
-            Button(onClick = onAll, modifier = Modifier.testTag("search.expandScope")) {
+            Button(
+                onClick = onAll,
+                modifier = Modifier.testTag("search.expandScope"),
+                shape = MaterialTheme.shapes.medium,
+            ) {
                 Text(tr("search_all"))
             }
         if (!guidance)
-            OutlinedButton(onClick = onClear, modifier = Modifier.testTag("search.clear")) {
+            OutlinedButton(
+                onClick = onClear,
+                modifier = Modifier.testTag("search.clear"),
+                shape = MaterialTheme.shapes.medium,
+            ) {
                 Text(tr("clear_search"))
             }
     }
@@ -583,7 +655,7 @@ internal fun SearchResultItem(hit: SearchHit, query: String, open: () -> Unit) {
     ListItem(
         headlineContent = {
             Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(UiSpacing.sm),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 hit.item?.takeIf { it.state.isNotBlank() }?.let { WorkflowIcon(it) }
@@ -596,9 +668,9 @@ internal fun SearchResultItem(hit: SearchHit, query: String, open: () -> Unit) {
             }
         },
         supportingContent = {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(UiSpacing.xs)) {
                 if (hit.snippet.isNotEmpty()) HighlightText(hit.snippet, query)
-                Text(
+                val detail =
                     when {
                         hit.kind == "settings" -> ""
                         hit.entry != null ->
@@ -616,9 +688,9 @@ internal fun SearchResultItem(hit: SearchHit, query: String, open: () -> Unit) {
                                 .filter { it.isNotBlank() }
                                 .joinToString(" · ")
                         else -> hit.path
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                )
+                    }
+                if (detail.isNotEmpty())
+                    Text(detail, style = MaterialTheme.typography.bodySmall)
             }
         },
         leadingContent = {
@@ -645,8 +717,9 @@ fun HighlightText(
     maxLines: Int = 3,
     color: Color = LocalContentColor.current,
 ) {
-    val highlight = MaterialTheme.colorScheme.tertiaryContainer
-    val foreground = MaterialTheme.colorScheme.onTertiaryContainer
+    val colors = uiColors().searchHighlight
+    val highlight = colors.background
+    val foreground = colors.foreground
     val value =
         remember(text, query, highlight, foreground) {
             buildAnnotatedString {
@@ -672,8 +745,8 @@ private fun JournalDetailSheet(entry: JournalEntry, close: () -> Unit, showFile:
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
     ) {
         Column(
-            Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+            Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(UiSpacing.edge),
+            verticalArrangement = Arrangement.spacedBy(UiSpacing.lg),
         ) {
             Text(
                 entry.date.format(
@@ -690,8 +763,8 @@ private fun JournalDetailSheet(entry: JournalEntry, close: () -> Unit, showFile:
                 }
             }
             Row {
-                TextButton(onClick = showFile) { Text(tr("show_in_file")) }
-                TextButton(onClick = close) { Text(tr("close")) }
+                TextButton(shape = MaterialTheme.shapes.medium, onClick = showFile) { Text(tr("show_in_file")) }
+                TextButton(shape = MaterialTheme.shapes.medium, onClick = close) { Text(tr("close")) }
             }
         }
     }

@@ -1,4 +1,7 @@
-@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@file:OptIn(
+    androidx.compose.material3.ExperimentalMaterial3Api::class,
+    androidx.compose.foundation.layout.ExperimentalLayoutApi::class,
+)
 
 package com.roifewu.orgenda.ui
 
@@ -27,6 +30,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -84,7 +88,7 @@ internal fun SettingsSheet(
     ModalBottomSheet(onDismissRequest = ::dismiss, sheetState = sheetState) {
         Column(Modifier.fillMaxWidth().fillMaxHeight(0.9f)) {
             Row(
-                Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp),
+                Modifier.fillMaxWidth().padding(horizontal = UiSpacing.edge),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
@@ -106,10 +110,11 @@ internal fun SettingsSheet(
             title = { Text(tr("unsaved")) },
             text = { Text(tr("configuration_invalid")) },
             confirmButton = {
-                TextButton(onClick = { discard = false }) { Text(tr("continue_editing")) }
+                TextButton(shape = MaterialTheme.shapes.medium, onClick = { discard = false }) { Text(tr("continue_editing")) }
             },
             dismissButton = {
                 TextButton(
+                    shape = MaterialTheme.shapes.medium,
                     onClick = {
                         model.discardConfiguration()
                         discard = false
@@ -131,6 +136,7 @@ fun SettingsScreen(
     consumed: () -> Unit = {},
 ) {
     val context = LocalContext.current
+    val largeSettingsText = LocalDensity.current.fontScale > 1.3f
     val clipboard = LocalClipboardManager.current
     val edit by model.configuration.collectAsStateWithLifecycle()
     val local by model.settings.collectAsStateWithLifecycle()
@@ -141,6 +147,7 @@ fun SettingsScreen(
             consumed()
         }
     }
+    var workflowPreset by rememberSaveable { mutableStateOf(false) }
     var disconnect by remember { mutableStateOf(false) }
     var webdav by remember { mutableStateOf(false) }
     var switch by remember { mutableStateOf<List<WorkspaceEntity>?>(null) }
@@ -256,407 +263,461 @@ fun SettingsScreen(
     }
     BackHandler(LocalPageActive.current && section != null) { back() }
     val sectionStates = rememberSaveableStateHolder()
-    PageTransition(
-        section,
-        Modifier.fillMaxSize(),
-        direction = { _, next -> if (next == null) -1 else 1 },
-    ) { shownSection ->
-        sectionStates.SaveableStateProvider(shownSection ?: "root") {
-            Column(Modifier.fillMaxSize()) {
-                if (shownSection != null)
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = ::back) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, tr("back"))
-                        }
-                        Text(
-                            tr(shownSection),
-                            style = MaterialTheme.typography.titleLarge,
-                            modifier = Modifier.weight(1f),
-                        )
-                        if (edit?.saving == true)
-                            CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
-                        else if (edit?.dirty == true)
-                            TextButton(
-                                onClick = { model.action { model.saveConfigurationNow() } }
-                            ) {
-                                Text(tr("retry"))
+    CompositionLocalProvider(LocalSettingsLayout provides true) {
+        PageTransition(
+            section,
+            Modifier.fillMaxSize(),
+            direction = { _, next -> if (next == null) -1 else 1 },
+        ) { shownSection ->
+            sectionStates.SaveableStateProvider(shownSection ?: "root") {
+                Column(Modifier.fillMaxSize()) {
+                    if (shownSection != null)
+                        Row(
+                            Modifier.fillMaxWidth().padding(horizontal = UiSpacing.xs, vertical = UiSpacing.xs),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            IconButton(onClick = ::back) {
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, tr("back"))
                             }
-                    }
-                edit?.error?.let {
-                    Text(it, Modifier.padding(16.dp), color = MaterialTheme.colorScheme.error)
-                }
-                if (shownSection == null)
-                    LazyColumn(contentPadding = PaddingValues(bottom = 32.dp)) {
-                        item { SectionTitlePadded("workspace") }
-                        item {
-                            ListItem(
-                                headlineContent = { Text(snapshot.workspace?.name ?: "Orgenda") },
-                                supportingContent = {
-                                    Text(
-                                        tr(
-                                            if (snapshot.syncing) "syncing"
-                                            else if (snapshot.pending > 0) "pending" else "synced"
-                                        ) +
-                                            if (snapshot.pending > 0) " · ${snapshot.pending}"
-                                            else ""
-                                    )
-                                },
-                            )
-                        }
-                        snapshot.workspace?.let { workspace ->
-                            item {
-                                androidx.compose.foundation.text.selection.SelectionContainer {
-                                    Text(
-                                        workspace.root,
-                                        Modifier.padding(horizontal = 16.dp),
-                                        style = MaterialTheme.typography.bodySmall,
-                                    )
-                                }
-                            }
-                            if (workspace.kind == "webdav" && workspace.username.isNotBlank())
-                                item {
-                                    ListItem(
-                                        headlineContent = { Text(tr("username")) },
-                                        supportingContent = { Text(workspace.username) },
-                                    )
-                                }
-                        }
-                        snapshot.syncError?.let { message ->
-                            item {
-                                Text(
-                                    message,
-                                    Modifier.padding(16.dp),
-                                    color = MaterialTheme.colorScheme.error,
-                                )
-                            }
-                        }
-                        snapshot.workspace
-                            ?.lastSync
-                            ?.takeIf { it > 0 }
-                            ?.let { checked ->
-                                item {
-                                    Text(
-                                        tr("last_checked") +
-                                            ": " +
-                                            java.time.Instant.ofEpochMilli(checked)
-                                                .atZone(java.time.ZoneId.systemDefault())
-                                                .format(
-                                                    java.time.format.DateTimeFormatter
-                                                        .ofLocalizedDateTime(
-                                                            java.time.format.FormatStyle.MEDIUM
-                                                        )
-                                                ),
-                                        Modifier.padding(horizontal = 16.dp),
-                                        style = MaterialTheme.typography.bodySmall,
-                                    )
-                                }
-                            }
-                        if (snapshot.workspace?.kind != "private")
-                            item {
-                                SettingRow("disconnect", !snapshot.syncing) { disconnect = true }
-                            }
-                        item {
-                            SettingRow("local_folder", !snapshot.syncing) {
-                                folderPicker.launch(null)
-                            }
-                        }
-                        item { SettingRow("connect_dav", !snapshot.syncing) { webdav = true } }
-                        item {
-                            SettingRow("switch_workspace", !snapshot.syncing) {
-                                scope.launch { switch = model.repository.workspaces() }
-                            }
-                        }
-                        item {
-                            SettingRow("recovery_export") {
-                                recovery.launch("orgenda-recovery.zip")
-                            }
-                        }
-                        item {
                             Text(
-                                tr("switch_hint"),
-                                Modifier.padding(horizontal = 16.dp),
-                                style = MaterialTheme.typography.bodySmall,
+                                tr(shownSection),
+                                style = MaterialTheme.typography.titleLarge,
+                                modifier = Modifier.weight(1f).padding(start = UiSpacing.sm),
                             )
-                        }
-                        if (snapshot.workspace?.kind == "saf")
-                            item {
-                                Text(
-                                    tr("folder_limit"),
-                                    Modifier.padding(16.dp),
-                                    style = MaterialTheme.typography.bodySmall,
-                                )
-                            }
-                        if (snapshot.conflicts.isNotEmpty()) {
-                            item { SectionTitlePadded("conflicts") }
-                            items(snapshot.conflicts, key = { it.id }) { file ->
-                                ListItem(
-                                    headlineContent = { Text(file.path) },
-                                    modifier = Modifier.clickable { conflict = file },
-                                )
-                            }
-                        }
-                        items(snapshot.operations.filter { it.error != null }, key = { it.id }) {
-                            operation ->
-                            ListItem(
-                                headlineContent = { Text(operation.to) },
-                                supportingContent = { Text(operation.error ?: "") },
-                                trailingContent = {
-                                    TextButton(
-                                        onClick = {
-                                            model.action {
-                                                model.repository.retryOperation(operation.id)
-                                            }
-                                        }
-                                    ) {
-                                        Text(tr("retry"))
-                                    }
-                                },
-                            )
-                        }
-                        item { SectionTitlePadded("settings") }
-                        listOf(
-                                "workflow",
-                                "capture_templates",
-                                "files_agenda",
-                                "reminders",
-                                "configuration",
-                            )
-                            .forEach { key -> item { SettingRow(key) { section = key } } }
-                        item { SectionTitlePadded("appearance") }
-                        item {
-                            Box(Modifier.padding(horizontal = 16.dp)) {
-                                Choice(
-                                    local.theme,
-                                    listOf("system", "light", "dark"),
-                                    "appearance",
-                                    model.app.settings::theme,
-                                    presentation = ChoicePresentation.Segmented,
-                                )
-                            }
-                        }
-                    }
-                else
-                    Column(
-                        Modifier.fillMaxWidth()
-                            .verticalScroll(rememberScrollState())
-                            .padding(16.dp)
-                            .imePadding(),
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        when (shownSection) {
-                            "appearance" ->
-                                Choice(
-                                    local.theme,
-                                    listOf("system", "light", "dark"),
-                                    "appearance",
-                                    model.app.settings::theme,
-                                    presentation = ChoicePresentation.Segmented,
-                                )
-                            "workflow" ->
-                                WorkflowSettings(
-                                    config,
-                                    snapshot.workspace?.id.orEmpty(),
-                                    { workspaceId, expected, value ->
-                                        model.saveConfigurationEdit(value, expected, workspaceId)
-                                    },
-                                ) {
-                                    model.configure(it)
-                                }
-                            "capture_templates" ->
-                                CaptureSettings(
-                                    config,
-                                    snapshot,
-                                    { templatePreview = it },
-                                    { workspaceId, expected, value ->
-                                        model.saveConfigurationEdit(value, expected, workspaceId)
-                                    },
-                                ) {
-                                    model.configure(it)
-                                }
-                            "files_agenda" -> FileSettings(config, snapshot) { model.configure(it) }
-                            "reminders" -> {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text(tr("enable_reminders"), Modifier.weight(1f))
-                                    Switch(
-                                        local.notifications,
-                                        { enabled ->
-                                            model.app.settings.notifications(enabled)
-                                            if (enabled)
-                                                notifications.launch(
-                                                    Manifest.permission.POST_NOTIFICATIONS
-                                                )
-                                        },
-                                    )
-                                }
+                            if (shownSection == "workflow" && !largeSettingsText)
                                 OutlinedButton(
-                                    onClick = {
-                                        notifications.launch(Manifest.permission.POST_NOTIFICATIONS)
-                                    }
-                                ) {
-                                    Text(tr("notification_permission"))
+                                    onClick = { workflowPreset = true },
+                                    shape = MaterialTheme.shapes.medium,
+                                    modifier = Modifier.widthIn(max = 136.dp).padding(end = UiSpacing.md),
+                                    contentPadding = PaddingValues(horizontal = UiSpacing.sm, vertical = UiSpacing.xs),
+                                ) { Text(tr("workflow_preset")) }
+                            if (edit?.saving == true)
+                                Box(Modifier.size(UiSizes.touchTarget), contentAlignment = Alignment.Center) {
+                                    CircularProgressIndicator(Modifier.size(UiSizes.progressIndicator), strokeWidth = UiSizes.progressStroke)
                                 }
-                                OutlinedButton(
-                                    onClick = {
-                                        context.startActivity(
-                                            Intent(
-                                                Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
-                                                Uri.parse("package:${context.packageName}"),
-                                            )
-                                        )
-                                    }
-                                ) {
-                                    Text(tr("exact_permission"))
-                                }
-                                val permitted =
-                                    remember(permissionRevision) {
-                                        model.app.reminders.authorized() to
-                                            model.app.reminders.exact()
-                                    }
-                                Text(
-                                    tr("notification_permission") +
-                                        ": " +
-                                        tr(if (permitted.first) "allowed" else "not_allowed") +
-                                        "\n" +
-                                        tr("exact_reminders") +
-                                        ": " +
-                                        tr(if (permitted.second) "allowed" else "not_allowed"),
-                                    style = MaterialTheme.typography.bodySmall,
-                                )
+                            else if (edit?.dirty == true)
                                 TextButton(
-                                    onClick = {
-                                        context.startActivity(
-                                            Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
-                                                .putExtra(
-                                                    Settings.EXTRA_APP_PACKAGE,
-                                                    context.packageName,
-                                                )
-                                        )
-                                    }
+                                    shape = MaterialTheme.shapes.medium,
+                                    onClick = { model.action { model.saveConfigurationNow() } }
                                 ) {
-                                    Text(tr("notification_settings"))
+                                    Text(tr("retry"))
                                 }
-                                Text(
-                                    tr("reminder_degraded"),
-                                    style = MaterialTheme.typography.bodySmall,
+                        }
+                    if (shownSection == "workflow" && largeSettingsText)
+                        OutlinedButton(
+                            onClick = { workflowPreset = true },
+                            shape = MaterialTheme.shapes.medium,
+                            modifier = Modifier.padding(horizontal = UiSpacing.edge).fillMaxWidth(),
+                        ) { Text(tr("workflow_preset")) }
+                    edit?.error?.let {
+                        Text(it, Modifier.padding(UiSpacing.edge), color = MaterialTheme.colorScheme.error)
+                    }
+                    if (shownSection == null)
+                        LazyColumn(contentPadding = PaddingValues(top = UiSpacing.sm, bottom = UiSpacing.lg)) {
+                            item { SectionTitle("workspace", Modifier.padding(horizontal = UiSpacing.edge).padding(top = UiSpacing.xs, bottom = UiSpacing.xs)) }
+                            item {
+                                ListItem(
+                                    headlineContent = { Text(snapshot.workspace?.name ?: "Orgenda") },
+                                    supportingContent = {
+                                        Text(
+                                            tr(
+                                                if (snapshot.syncing) "syncing"
+                                                else if (snapshot.pending > 0) "pending" else "synced"
+                                            ) +
+                                                if (snapshot.pending > 0) " · ${snapshot.pending}"
+                                                else ""
+                                        )
+                                    },
                                 )
-                                ReminderTimingSetting(config.reminders.advanceMinutes, "advance") {
-                                    model.configure(
-                                        config.copy(
-                                            reminders = config.reminders.copy(advanceMinutes = it)
-                                        )
-                                    )
-                                }
-                                ReminderTimingSetting(
-                                    config.reminders.repeatMinutes,
-                                    "repeat_minutes",
-                                ) {
-                                    model.configure(
-                                        config.copy(
-                                            reminders = config.reminders.copy(repeatMinutes = it)
-                                        )
-                                    )
-                                }
-                                ReminderTimingSetting(
-                                    config.reminders.deadlineWarningDays,
-                                    "warning_days",
-                                ) {
-                                    model.configure(
-                                        config.copy(
-                                            reminders =
-                                                config.reminders.copy(deadlineWarningDays = it)
-                                        )
-                                    )
-                                }
-                                val rules = config.reminders
-                                if (
-                                    rules.advanceMinutes in 0..1440 &&
-                                        rules.repeatMinutes in 1..1440
-                                ) {
-                                    val offsets =
-                                        ((rules.advanceMinutes downTo 0 step rules.repeatMinutes)
-                                                .toList() + 0)
-                                            .distinct()
-                                    Text(
-                                        offsets.take(6).joinToString(" → ") {
-                                            if (it == 0) context.label("starting_now")
-                                            else "−${it}m"
-                                        } +
-                                            if (offsets.size > 6) " → … → " + tr("starting_now")
-                                            else "",
-                                        style = MaterialTheme.typography.bodySmall,
-                                    )
-                                }
                             }
-                            "configuration" -> {
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    OutlinedButton(
-                                        onClick = {
-                                            import.launch(arrayOf("application/json", "text/*"))
-                                        }
-                                    ) {
-                                        Text(tr("import_json"))
-                                    }
-                                    OutlinedButton(onClick = { export.launch("config.json") }) {
-                                        Text(tr("export_json"))
-                                    }
-                                }
-                                OutlinedButton(onClick = { pastedImport = "" }) {
-                                    Text(tr("paste_configuration"))
-                                }
-                                TextButton(onClick = { showJson = !showJson }) {
-                                    Text(tr("view_configuration"))
-                                    Icon(
-                                        if (showJson) Icons.Default.ExpandLess
-                                        else Icons.Default.ExpandMore,
-                                        null,
-                                    )
-                                }
-                                if (showJson || edit?.error != null)
-                                    Field(
-                                        edit?.raw ?: ConfigurationCodec.encode(config),
-                                        model::configureRaw,
-                                        "configuration",
-                                        singleLine = false,
-                                    )
-                                undoImport
-                                    ?.takeIf { config == importReplacement }
-                                    ?.let { previous ->
-                                        TextButton(
-                                            onClick = {
-                                                model.configure(previous)
-                                                undoImport = null
-                                                importReplacement = null
-                                            },
-                                            enabled = edit?.dirty != true && edit?.saving != true,
-                                        ) {
-                                            Text(tr("undo"))
-                                        }
-                                    }
-                                OutlinedButton(
-                                    onClick = {
-                                        clipboard.setText(
-                                            AnnotatedString(ConfigurationPrompt.text(config))
-                                        )
-                                        promptCopied = true
-                                    }
-                                ) {
-                                    Text(tr(if (promptCopied) "copied" else "emacs_prompt"))
-                                }
-                                TextButton(onClick = { showPrompt = !showPrompt }) {
-                                    Text(tr("preview"))
-                                }
-                                if (showPrompt)
+                            snapshot.workspace?.let { workspace ->
+                                item {
                                     androidx.compose.foundation.text.selection.SelectionContainer {
                                         Text(
-                                            ConfigurationPrompt.text(config),
+                                            workspace.root,
+                                            Modifier.padding(horizontal = UiSpacing.edge),
                                             style = MaterialTheme.typography.bodySmall,
                                         )
                                     }
-                                TextButton(onClick = { confirmReset = true }) { Text(tr("reset")) }
+                                }
+                                if (workspace.kind == "webdav" && workspace.username.isNotBlank())
+                                    item {
+                                        ListItem(
+                                            headlineContent = { Text(tr("username")) },
+                                            supportingContent = { Text(workspace.username) },
+                                        )
+                                    }
+                            }
+                            snapshot.syncError?.let { message ->
+                                item {
+                                    Text(
+                                        message,
+                                        Modifier.padding(UiSpacing.edge),
+                                        color = MaterialTheme.colorScheme.error,
+                                    )
+                                }
+                            }
+                            snapshot.workspace
+                                ?.lastSync
+                                ?.takeIf { it > 0 }
+                                ?.let { checked ->
+                                    item {
+                                        Text(
+                                            tr("last_checked") +
+                                                ": " +
+                                                java.time.Instant.ofEpochMilli(checked)
+                                                    .atZone(java.time.ZoneId.systemDefault())
+                                                    .format(
+                                                        java.time.format.DateTimeFormatter
+                                                            .ofLocalizedDateTime(
+                                                                java.time.format.FormatStyle.MEDIUM
+                                                            )
+                                                    ),
+                                            Modifier.padding(horizontal = UiSpacing.edge),
+                                            style = MaterialTheme.typography.bodySmall,
+                                        )
+                                    }
+                                }
+                            if (snapshot.workspace?.kind != "private")
+                                item {
+                                    SettingRow("disconnect", !snapshot.syncing) { disconnect = true }
+                                }
+                            item {
+                                SettingRow("local_folder", !snapshot.syncing) {
+                                    folderPicker.launch(null)
+                                }
+                            }
+                            item { SettingRow("connect_dav", !snapshot.syncing) { webdav = true } }
+                            item {
+                                SettingRow("switch_workspace", !snapshot.syncing) {
+                                    scope.launch { switch = model.repository.workspaces() }
+                                }
+                            }
+                            item {
+                                SettingRow("recovery_export") {
+                                    recovery.launch("orgenda-recovery.zip")
+                                }
+                            }
+                            item {
+                                Text(
+                                    tr("switch_hint"),
+                                    Modifier.padding(
+                                        horizontal = UiSpacing.edge,
+                                        vertical = UiSpacing.supportingTextExtraVertical,
+                                    ),
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
+                            }
+                            if (snapshot.workspace?.kind == "saf")
+                                item {
+                                    Text(
+                                        tr("folder_limit"),
+                                        Modifier.padding(
+                                            horizontal = UiSpacing.edge,
+                                            vertical = UiSpacing.edge + UiSpacing.supportingTextExtraVertical,
+                                        ),
+                                        style = MaterialTheme.typography.bodySmall,
+                                    )
+                                }
+                            if (snapshot.conflicts.isNotEmpty()) {
+                                item { SectionTitle("conflicts", Modifier.padding(horizontal = UiSpacing.edge).padding(top = UiSpacing.md, bottom = UiSpacing.xs)) }
+                                items(snapshot.conflicts, key = { it.id }) { file ->
+                                    ListItem(
+                                        headlineContent = { Text(file.path) },
+                                        modifier = Modifier.clickable { conflict = file },
+                                    )
+                                }
+                            }
+                            items(snapshot.operations.filter { it.error != null }, key = { it.id }) {
+                                operation ->
+                                ListItem(
+                                    headlineContent = { Text(operation.to) },
+                                    supportingContent = { Text(operation.error ?: "") },
+                                    trailingContent = {
+                                        TextButton(
+                                            shape = MaterialTheme.shapes.medium,
+                                            onClick = {
+                                                model.action {
+                                                    model.repository.retryOperation(operation.id)
+                                                }
+                                            }
+                                        ) {
+                                            Text(tr("retry"))
+                                        }
+                                    },
+                                )
+                            }
+                            item { SectionTitle("settings", Modifier.padding(horizontal = UiSpacing.edge).padding(top = UiSpacing.md, bottom = UiSpacing.xs)) }
+                            listOf(
+                                    "workflow",
+                                    "capture_templates",
+                                    "files_agenda",
+                                    "reminders",
+                                    "configuration",
+                                )
+                                .forEach { key -> item { SettingRow(key) { section = key } } }
+                            item {
+                                Box(Modifier.padding(start = UiSpacing.edge, top = UiSpacing.md, end = UiSpacing.edge)) {
+                                    Choice(
+                                        local.theme,
+                                        listOf("system", "light", "dark"),
+                                        "appearance",
+                                        model.app.settings::theme,
+                                        presentation = ChoicePresentation.Segmented,
+                                    )
+                                }
                             }
                         }
-                        Spacer(Modifier.height(24.dp))
-                    }
+                    else
+                        Column(
+                            Modifier.fillMaxWidth()
+                                .imePadding()
+                                .verticalScroll(rememberScrollState())
+                                .padding(start = UiSpacing.edge, top = UiSpacing.sm, end = UiSpacing.edge, bottom = UiSpacing.lg),
+                            verticalArrangement = Arrangement.spacedBy(UiSpacing.md),
+                        ) {
+                            when (shownSection) {
+                                "appearance" ->
+                                    Choice(
+                                        local.theme,
+                                        listOf("system", "light", "dark"),
+                                        "appearance",
+                                        model.app.settings::theme,
+                                        presentation = ChoicePresentation.Segmented,
+                                    )
+                                "workflow" ->
+                                    WorkflowSettings(
+                                        config,
+                                        snapshot.workspace?.id.orEmpty(),
+                                        { workspaceId, expected, value ->
+                                            model.saveConfigurationEdit(value, expected, workspaceId)
+                                        },
+                                        presetRequested = workflowPreset,
+                                        consumePreset = { workflowPreset = false },
+                                        showPresetButton = false,
+                                    ) {
+                                        model.configure(it)
+                                    }
+                                "capture_templates" ->
+                                    CaptureSettings(
+                                        config,
+                                        snapshot,
+                                        { templatePreview = it },
+                                        { workspaceId, expected, value ->
+                                            model.saveConfigurationEdit(value, expected, workspaceId)
+                                        },
+                                    ) {
+                                        model.configure(it)
+                                    }
+                                "files_agenda" -> FileSettings(config, snapshot) { model.configure(it) }
+                                "reminders" -> {
+                                    SettingsGroup {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(tr("enable_reminders"), Modifier.weight(1f))
+                                            Switch(
+                                                local.notifications,
+                                                { enabled ->
+                                                    model.app.settings.notifications(enabled)
+                                                    if (enabled)
+                                                        notifications.launch(
+                                                            Manifest.permission.POST_NOTIFICATIONS
+                                                        )
+                                                },
+                                            )
+                                        }
+                                        OutlinedButton(
+                                            shape = MaterialTheme.shapes.medium,
+                                            onClick = {
+                                                notifications.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                            }
+                                        ) {
+                                            Text(tr("notification_permission"))
+                                        }
+                                        OutlinedButton(
+                                            shape = MaterialTheme.shapes.medium,
+                                            onClick = {
+                                                context.startActivity(
+                                                    Intent(
+                                                        Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
+                                                        Uri.parse("package:${context.packageName}"),
+                                                    )
+                                                )
+                                            }
+                                        ) {
+                                            Text(tr("exact_permission"))
+                                        }
+                                        val permitted =
+                                            remember(permissionRevision) {
+                                                model.app.reminders.authorized() to
+                                                    model.app.reminders.exact()
+                                            }
+                                        Text(
+                                            tr("notification_permission") +
+                                                ": " +
+                                                tr(if (permitted.first) "allowed" else "not_allowed") +
+                                                "\n" +
+                                                tr("exact_reminders") +
+                                                ": " +
+                                                tr(if (permitted.second) "allowed" else "not_allowed"),
+                                            style = MaterialTheme.typography.bodySmall,
+                                        )
+                                        TextButton(
+                                            shape = MaterialTheme.shapes.medium,
+                                            onClick = {
+                                                context.startActivity(
+                                                    Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                                                        .putExtra(
+                                                            Settings.EXTRA_APP_PACKAGE,
+                                                            context.packageName,
+                                                        )
+                                                )
+                                            }
+                                        ) {
+                                            Text(tr("notification_settings"))
+                                        }
+                                        Text(
+                                            tr("reminder_degraded"),
+                                            Modifier.padding(vertical = UiSpacing.supportingTextExtraVertical),
+                                            style = MaterialTheme.typography.bodySmall,
+                                        )
+                                    }
+                                    ReminderTimingSetting(config.reminders.advanceMinutes, "advance") {
+                                        model.configure(
+                                            config.copy(
+                                                reminders = config.reminders.copy(advanceMinutes = it)
+                                            )
+                                        )
+                                    }
+                                    ReminderTimingSetting(
+                                        config.reminders.repeatMinutes,
+                                        "repeat_minutes",
+                                    ) {
+                                        model.configure(
+                                            config.copy(
+                                                reminders = config.reminders.copy(repeatMinutes = it)
+                                            )
+                                        )
+                                    }
+                                    ReminderTimingSetting(
+                                        config.reminders.deadlineWarningDays,
+                                        "warning_days",
+                                    ) {
+                                        model.configure(
+                                            config.copy(
+                                                reminders =
+                                                    config.reminders.copy(deadlineWarningDays = it)
+                                            )
+                                        )
+                                    }
+                                    val rules = config.reminders
+                                    if (
+                                        rules.advanceMinutes in 0..1440 &&
+                                            rules.repeatMinutes in 1..1440
+                                    ) {
+                                        val offsets =
+                                            ((rules.advanceMinutes downTo 0 step rules.repeatMinutes)
+                                                    .toList() + 0)
+                                                .distinct()
+                                        Text(
+                                            offsets.take(6).joinToString(" → ") {
+                                                if (it == 0) context.label("starting_now")
+                                                else "−${it}m"
+                                            } +
+                                                if (offsets.size > 6) " → … → " + tr("starting_now")
+                                                else "",
+                                            style = MaterialTheme.typography.bodySmall,
+                                        )
+                                    }
+                                }
+                                "configuration" -> {
+                                    SettingsGroup {
+                                        FlowRow(
+                                            horizontalArrangement = Arrangement.spacedBy(UiSpacing.sm),
+                                            verticalArrangement = Arrangement.spacedBy(UiSpacing.sm),
+                                        ) {
+                                            OutlinedButton(
+                                                shape = MaterialTheme.shapes.medium,
+                                                onClick = {
+                                                    import.launch(arrayOf("application/json", "text/*"))
+                                                }
+                                            ) {
+                                                Text(tr("import_json"))
+                                            }
+                                            OutlinedButton(
+                                                onClick = { export.launch("config.json") },
+                                                shape = MaterialTheme.shapes.medium,
+                                            ) {
+                                                Text(tr("export_json"))
+                                            }
+                                        }
+                                        OutlinedButton(
+                                            onClick = { pastedImport = "" },
+                                            shape = MaterialTheme.shapes.medium,
+                                        ) {
+                                            Text(tr("paste_configuration"))
+                                        }
+                                    }
+                                    SettingsGroup {
+                                        TextButton(shape = MaterialTheme.shapes.medium, onClick = { showJson = !showJson }) {
+                                            Text(tr("view_configuration"))
+                                            Icon(
+                                                if (showJson) Icons.Default.ExpandLess
+                                                else Icons.Default.ExpandMore,
+                                                null,
+                                            )
+                                        }
+                                        if (showJson || edit?.error != null)
+                                            Field(
+                                                edit?.raw ?: ConfigurationCodec.encode(config),
+                                                model::configureRaw,
+                                                "configuration",
+                                                singleLine = false,
+                                            )
+                                        undoImport
+                                            ?.takeIf { config == importReplacement }
+                                            ?.let { previous ->
+                                                TextButton(
+                                                    shape = MaterialTheme.shapes.medium,
+                                                    onClick = {
+                                                        model.configure(previous)
+                                                        undoImport = null
+                                                        importReplacement = null
+                                                    },
+                                                    enabled = edit?.dirty != true && edit?.saving != true,
+                                                ) {
+                                                    Text(tr("undo"))
+                                                }
+                                            }
+                                    }
+                                    SettingsGroup {
+                                        OutlinedButton(
+                                            shape = MaterialTheme.shapes.medium,
+                                            onClick = {
+                                                clipboard.setText(
+                                                    AnnotatedString(ConfigurationPrompt.text(config))
+                                                )
+                                                promptCopied = true
+                                            }
+                                        ) {
+                                            Text(tr(if (promptCopied) "copied" else "emacs_prompt"))
+                                        }
+                                        TextButton(shape = MaterialTheme.shapes.medium, onClick = { showPrompt = !showPrompt }) {
+                                            Text(tr("preview"))
+                                        }
+                                        if (showPrompt)
+                                            androidx.compose.foundation.text.selection.SelectionContainer {
+                                                Text(
+                                                    ConfigurationPrompt.text(config),
+                                                    Modifier.padding(vertical = UiSpacing.supportingTextExtraVertical),
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                )
+                                            }
+                                    }
+                                    TextButton(shape = MaterialTheme.shapes.medium, onClick = { confirmReset = true }) { Text(tr("reset")) }
+                                }
+                            }
+                        }
+                }
             }
         }
     }
@@ -675,6 +736,7 @@ fun SettingsScreen(
             },
             confirmButton = {
                 TextButton(
+                    shape = MaterialTheme.shapes.medium,
                     onClick = {
                         undoImport = config
                         importReplacement = imported
@@ -686,7 +748,7 @@ fun SettingsScreen(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { importPreview = null }) { Text(tr("cancel")) }
+                TextButton(shape = MaterialTheme.shapes.medium, onClick = { importPreview = null }) { Text(tr("cancel")) }
             },
         )
     }
@@ -707,6 +769,7 @@ fun SettingsScreen(
             text = { Text(tr("switch_hint")) },
             confirmButton = {
                 TextButton(
+                    shape = MaterialTheme.shapes.medium,
                     onClick = {
                         model.action {
                             model.saveConfigurationNow()
@@ -718,7 +781,7 @@ fun SettingsScreen(
                     Text(tr("disconnect"))
                 }
             },
-            dismissButton = { TextButton(onClick = { disconnect = false }) { Text(tr("cancel")) } },
+            dismissButton = { TextButton(shape = MaterialTheme.shapes.medium, onClick = { disconnect = false }) { Text(tr("cancel")) } },
         )
     }
     if (webdav) WebDavDialog(model) { webdav = false }
@@ -731,6 +794,7 @@ fun SettingsScreen(
                 Column(Modifier.heightIn(max = 400.dp).verticalScroll(rememberScrollState())) {
                     workspaces.forEach { workspace ->
                         TextButton(
+                            shape = MaterialTheme.shapes.medium,
                             onClick = {
                                 model.action {
                                     model.saveConfigurationNow()
@@ -744,7 +808,7 @@ fun SettingsScreen(
                     }
                 }
             },
-            confirmButton = { TextButton(onClick = { switch = null }) { Text(tr("close")) } },
+            confirmButton = { TextButton(shape = MaterialTheme.shapes.medium, onClick = { switch = null }) { Text(tr("close")) } },
         )
     }
     conflict?.let { file -> ConflictDialog(model, file) { conflict = null } }
@@ -755,10 +819,11 @@ fun SettingsScreen(
             title = { Text(tr("unsaved")) },
             text = { Text(tr("configuration_invalid")) },
             confirmButton = {
-                TextButton(onClick = { leave = false }) { Text(tr("continue_editing")) }
+                TextButton(shape = MaterialTheme.shapes.medium, onClick = { leave = false }) { Text(tr("continue_editing")) }
             },
             dismissButton = {
                 TextButton(
+                    shape = MaterialTheme.shapes.medium,
                     onClick = {
                         model.discardConfiguration()
                         leave = false
@@ -777,6 +842,7 @@ fun SettingsScreen(
             title = { Text(tr("reset")) },
             confirmButton = {
                 TextButton(
+                    shape = MaterialTheme.shapes.medium,
                     onClick = {
                         undoImport = config
                         importReplacement = WorkspaceConfig.defaults()
@@ -788,15 +854,10 @@ fun SettingsScreen(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { confirmReset = false }) { Text(tr("cancel")) }
+                TextButton(shape = MaterialTheme.shapes.medium, onClick = { confirmReset = false }) { Text(tr("cancel")) }
             },
         )
     }
-}
-
-@Composable
-private fun SectionTitlePadded(key: String) {
-    Box(Modifier.padding(horizontal = 16.dp)) { SectionTitle(key) }
 }
 
 @Composable
@@ -824,8 +885,9 @@ private fun WebDavDialog(model: OrgendaViewModel, close: () -> Unit) {
         title = { Text(tr("connect_dav")) },
         text = {
             Column(
-                Modifier.verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                Modifier.verticalScroll(rememberScrollState())
+                    .padding(top = if (LocalDensity.current.fontScale > 1.3f) UiSpacing.lg else UiSpacing.xs),
+                verticalArrangement = Arrangement.spacedBy(UiSpacing.md),
             ) {
                 Field(
                     address,
@@ -858,6 +920,7 @@ private fun WebDavDialog(model: OrgendaViewModel, close: () -> Unit) {
         },
         confirmButton = {
             TextButton(
+                shape = MaterialTheme.shapes.medium,
                 enabled =
                     !connecting &&
                         address.isNotBlank() &&
@@ -887,7 +950,7 @@ private fun WebDavDialog(model: OrgendaViewModel, close: () -> Unit) {
             }
         },
         dismissButton = {
-            TextButton(onClick = close, enabled = !connecting) { Text(tr("cancel")) }
+            TextButton(shape = MaterialTheme.shapes.medium, onClick = close, enabled = !connecting) { Text(tr("cancel")) }
         },
     )
 }
@@ -927,10 +990,15 @@ private fun ConflictDialog(model: OrgendaViewModel, file: FileEntity, close: () 
         onDismissRequest = { if (!saving) close() },
         title = { Text(file.path) },
         text = {
-            Column {
-                Row {
+            Column(
+                Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(UiSpacing.md),
+            ) {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(UiSpacing.sm),
+                    verticalArrangement = Arrangement.spacedBy(UiSpacing.sm),
+                ) {
                     FilterChip(!tab, { tab = false }, label = { Text(tr("local_version")) })
-                    Spacer(Modifier.width(8.dp))
                     FilterChip(tab, { tab = true }, label = { Text(tr("remote_version")) })
                 }
                 androidx.compose.foundation.text.selection.SelectionContainer {
@@ -941,18 +1009,18 @@ private fun ConflictDialog(model: OrgendaViewModel, file: FileEntity, close: () 
                     )
                 }
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-                TextButton(onClick = { confirmation = "local" }, enabled = !saving) {
+                TextButton(shape = MaterialTheme.shapes.medium, onClick = { confirmation = "local" }, enabled = !saving) {
                     Text(tr("keep_local"))
                 }
-                TextButton(onClick = { confirmation = "remote" }, enabled = !saving) {
+                TextButton(shape = MaterialTheme.shapes.medium, onClick = { confirmation = "remote" }, enabled = !saving) {
                     Text(tr("keep_remote"))
                 }
             }
         },
         confirmButton = {
-            TextButton(onClick = { resolve("both") }, enabled = !saving) { Text(tr("keep_both")) }
+            TextButton(shape = MaterialTheme.shapes.medium, onClick = { resolve("both") }, enabled = !saving) { Text(tr("keep_both")) }
         },
-        dismissButton = { TextButton(onClick = close, enabled = !saving) { Text(tr("cancel")) } },
+        dismissButton = { TextButton(shape = MaterialTheme.shapes.medium, onClick = close, enabled = !saving) { Text(tr("cancel")) } },
     )
     confirmation?.let { choice ->
         AlertDialog(
@@ -961,6 +1029,7 @@ private fun ConflictDialog(model: OrgendaViewModel, file: FileEntity, close: () 
             text = { Text(tr("confirm_conflict_version")) },
             confirmButton = {
                 TextButton(
+                    shape = MaterialTheme.shapes.medium,
                     onClick = {
                         confirmation = null
                         resolve(choice)
@@ -970,7 +1039,7 @@ private fun ConflictDialog(model: OrgendaViewModel, file: FileEntity, close: () 
                 }
             },
             dismissButton = {
-                TextButton(onClick = { confirmation = null }) { Text(tr("cancel")) }
+                TextButton(shape = MaterialTheme.shapes.medium, onClick = { confirmation = null }) { Text(tr("cancel")) }
             },
         )
     }
@@ -1000,14 +1069,7 @@ internal fun ConfigurationPasteDialog(
             },
         )
     ModalBottomSheet(onDismissRequest = ::dismiss, sheetState = sheetState) {
-        Column(
-            Modifier.fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .padding(16.dp)
-                .imePadding(),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Text(tr("paste_configuration"), style = MaterialTheme.typography.headlineSmall)
+        SettingsSheetContent("paste_configuration") {
             Field(
                 source,
                 {
@@ -1019,9 +1081,10 @@ internal fun ConfigurationPasteDialog(
                 modifier = Modifier.heightIn(min = 220.dp),
             )
             error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                TextButton(onClick = ::dismiss) { Text(tr("cancel")) }
+            SettingsActions {
+                TextButton(shape = MaterialTheme.shapes.medium, onClick = ::dismiss) { Text(tr("cancel")) }
                 Button(
+                    shape = MaterialTheme.shapes.medium,
                     enabled = source.isNotBlank(),
                     onClick = {
                         runCatching { ConfigurationCodec.decode(source) }
@@ -1052,30 +1115,34 @@ private fun ReminderTimingSetting(value: Int, label: String, change: (Int) -> Un
             "repeat_minutes" -> 1..1440
             else -> 0..365
         }
-    ListItem(
-        headlineContent = { Text(tr(label)) },
-        trailingContent = {
-            OutlinedButton(onClick = { editing = true }) { Text(value.toString()) }
-        },
-        modifier = Modifier.clickable { editing = true },
-    )
-    Choice(
-        value.toString(),
-        presets.map(Int::toString),
-        "common_values",
-        { change(it.toInt()) },
-        presentation = ChoicePresentation.Chips,
-        labels = { it },
-    )
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(UiSpacing.xs)) {
+        SettingsValueRow(label, value.toString(), true, { editing = true })
+        Choice(
+            value.toString(),
+            presets.map(Int::toString),
+            "common_values",
+            { change(it.toInt()) },
+            presentation = ChoicePresentation.Chips,
+            labels = { it },
+        )
+    }
     if (editing) {
         ModalPresence()
         var draft by rememberSaveable { mutableIntStateOf(value) }
         AlertDialog(
             onDismissRequest = { editing = false },
             title = { Text(tr(label)) },
-            text = { Column { NumberField(draft, label) { draft = it } } },
+            text = {
+                Column(
+                    Modifier.verticalScroll(rememberScrollState())
+                        .padding(top = if (LocalDensity.current.fontScale > 1.3f) UiSpacing.lg else UiSpacing.xs)
+                ) {
+                    NumberField(draft, label) { draft = it }
+                }
+            },
             confirmButton = {
                 TextButton(
+                    shape = MaterialTheme.shapes.medium,
                     onClick = {
                         change(draft)
                         editing = false
@@ -1085,7 +1152,7 @@ private fun ReminderTimingSetting(value: Int, label: String, change: (Int) -> Un
                     Text(tr("save"))
                 }
             },
-            dismissButton = { TextButton(onClick = { editing = false }) { Text(tr("cancel")) } },
+            dismissButton = { TextButton(shape = MaterialTheme.shapes.medium, onClick = { editing = false }) { Text(tr("cancel")) } },
         )
     }
 }

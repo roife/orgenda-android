@@ -72,7 +72,7 @@ internal fun SwipeActionsRow(
     val latestLeading by rememberUpdatedState(leading)
     val actionPixels = with(LocalDensity.current) { (88.dp * fontScale.coerceAtLeast(1f)).toPx() }
     val actionHeight =
-        48.dp +
+        UiSizes.touchTarget +
             with(LocalDensity.current) { MaterialTheme.typography.labelMedium.lineHeight.toDp() }
     var width by remember { mutableIntStateOf(0) }
     val leadingWidth = (leading.size * actionPixels).coerceAtMost(width * 0.8f)
@@ -202,7 +202,7 @@ internal fun SwipeActionsRow(
                                         action.invoke()
                                     }
                                 }
-                                .padding(8.dp),
+                                .padding(UiSpacing.sm),
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.Center,
                         ) {

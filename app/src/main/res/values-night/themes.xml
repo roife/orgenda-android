@@ -1,5 +1,4 @@
 <?xml version="1.0"?>
 <resources>
     <bool name="orgenda_light_system_bars">false</bool>
-    <color name="orgenda_accent">#A0D4AF</color>
 </resources>

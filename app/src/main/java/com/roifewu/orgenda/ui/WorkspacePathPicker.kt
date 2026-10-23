@@ -13,7 +13,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.unit.dp
 import com.roifewu.orgenda.core.safePath
 import com.roifewu.orgenda.data.*
 import kotlinx.coroutines.CancellationException
@@ -42,16 +41,30 @@ fun WorkspacePathPicker(
         onDismissRequest = close,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
     ) {
-        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            if (folder.isNotEmpty())
-                IconButton(onClick = { folder = folder.substringBeforeLast('/', "") }) {
-                    Icon(Icons.Default.ArrowUpward, tr("up"))
-                }
-            Text(folder.ifEmpty { snapshot.workspace?.name ?: "Orgenda" }, Modifier.weight(1f))
-            if (directory) TextButton(onClick = { select(folder) }) { Text(tr("select_folder")) }
-            TextButton(onClick = close) { Text(tr("cancel")) }
+        Column(
+            Modifier.fillMaxWidth().padding(horizontal = UiSpacing.edge, vertical = UiSpacing.sm),
+            verticalArrangement = Arrangement.spacedBy(UiSpacing.sm),
+        ) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                if (folder.isNotEmpty())
+                    IconButton(onClick = { folder = folder.substringBeforeLast('/', "") }) {
+                        Icon(Icons.Default.ArrowUpward, tr("up"))
+                    }
+                Text(
+                    folder.ifEmpty { snapshot.workspace?.name ?: "Orgenda" },
+                    Modifier.weight(1f),
+                    style = MaterialTheme.typography.titleLarge,
+                )
+            }
+            SettingsActions {
+                TextButton(shape = MaterialTheme.shapes.medium, onClick = close) { Text(tr("cancel")) }
+                if (directory) TextButton(shape = MaterialTheme.shapes.medium, onClick = { select(folder) }) { Text(tr("select_folder")) }
+            }
         }
-        LazyColumn(Modifier.fillMaxHeight(0.7f)) {
+        LazyColumn(
+            Modifier.fillMaxWidth().weight(1f, fill = false),
+            contentPadding = PaddingValues(bottom = UiSpacing.xl),
+        ) {
             val children =
                 snapshot.files
                     .filter {
@@ -64,7 +77,13 @@ fun WorkspacePathPicker(
                     .sortedWith(
                         compareBy<FileEntity> { !it.directory }.thenBy { it.path.lowercase() }
                     )
-            if (children.isEmpty()) item { Text(tr("no_files"), Modifier.padding(24.dp)) }
+            if (children.isEmpty())
+                item {
+                    Text(
+                        tr("no_files"),
+                        Modifier.padding(horizontal = UiSpacing.edge, vertical = UiSpacing.xl),
+                    )
+                }
             items(children, key = { it.id }) { file ->
                 ListItem(
                     headlineContent = { Text(file.path.substringAfterLast('/')) },
@@ -103,11 +122,12 @@ fun WorkspacePathField(
         invalid = invalid,
         supporting = if (invalid) tr("invalid_destination") else null,
         enabled = enabled,
+        trailing = {
+            IconButton(onClick = { picker = true }, enabled = enabled) {
+                Icon(Icons.Default.FolderOpen, tr("browse"))
+            }
+        },
     )
-    TextButton(onClick = { picker = true }, enabled = enabled) {
-        Icon(Icons.Default.FolderOpen, null)
-        Text(tr("browse"))
-    }
     if (picker && enabled)
         WorkspacePathPicker(
             snapshot,
@@ -160,7 +180,7 @@ fun MoveFileSheet(
                     supporting = if (!valid) tr("invalid_destination") else null,
                     enabled = !moving,
                 )
-                TextButton(onClick = { picker = true }, enabled = !moving) {
+                TextButton(shape = MaterialTheme.shapes.medium, onClick = { picker = true }, enabled = !moving) {
                     Icon(Icons.Default.Folder, null)
                     Text(folder.ifEmpty { tr("workspace") })
                 }
@@ -170,6 +190,7 @@ fun MoveFileSheet(
         },
         confirmButton = {
             TextButton(
+                shape = MaterialTheme.shapes.medium,
                 onClick = {
                     moving = true
                     error = null
@@ -194,6 +215,7 @@ fun MoveFileSheet(
         },
         dismissButton = {
             TextButton(
+                shape = MaterialTheme.shapes.medium,
                 onClick = close,
                 enabled = !moving,
                 modifier = Modifier.testTag("files.move.cancel"),

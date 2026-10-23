@@ -7,6 +7,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.FirstBaseline
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Constraints
@@ -62,6 +63,8 @@ internal fun MeasuredPreviewText(
         val width = constraints.constrainWidth(view.measuredWidth)
         val height = constraints.constrainHeight(view.measuredHeight)
         val child = children.single().measure(Constraints.fixed(width, height))
-        layout(width, height) { child.placeRelative(0, 0) }
+        layout(width, height, mapOf(FirstBaseline to view.baseline)) {
+            child.placeRelative(0, 0)
+        }
     }
 }

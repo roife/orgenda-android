@@ -13,11 +13,26 @@ import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.roifewu.orgenda.*
 import com.roifewu.orgenda.core.*
 import java.time.LocalDate
+import kotlin.math.roundToInt
 
 private val OutlineFilterSaver =
     listSaver<OutlineFilter, String>(
@@ -76,12 +91,28 @@ fun OutlineSheet(model: OrgendaViewModel, editor: EditorState, close: () -> Unit
                     }
             }
         }
+    val listState = rememberLazyListState()
+    val drag = remember(editor.session) { OutlineDragState() }
+    val drop by remember(filtered, editor.session) {
+        derivedStateOf { outlineDropAt(drag, listState, filtered, editor.session) }
+    }
+    val context = LocalContext.current
+    val primary = MaterialTheme.colorScheme.primary
+    val childContainer = uiColors().headingDropContainer
+    val edgePixels = with(LocalDensity.current) { UiSpacing.edge.toPx() }
+    var moveError by remember(editor.session) { mutableStateOf<String?>(null) }
+    fun move(source: OrgHeading, target: OrgHeading, placement: HeadingPlacement) {
+        moveError = null
+        model.moveHeading(source, target, placement, onFailure = {
+            moveError = it.message ?: context.label("operation_failed")
+        })
+    }
     ModalBottomSheet(
         onDismissRequest = close,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
     ) {
         Row(
-            Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+            Modifier.fillMaxWidth().padding(horizontal = UiSpacing.edge),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
@@ -95,87 +126,159 @@ fun OutlineSheet(model: OrgendaViewModel, editor: EditorState, close: () -> Unit
             ) {
                 Icon(Icons.Default.FilterList, tr("filter"))
             }
-            TextButton(onClick = close) { Text(tr("close")) }
+            TextButton(shape = MaterialTheme.shapes.medium, onClick = close) { Text(tr("close")) }
         }
         if (filter.active)
-            Row(Modifier.padding(horizontal = 16.dp)) {
+            Row(Modifier.padding(horizontal = UiSpacing.edge)) {
                 Text(
                     "${document.headings.count(filter::matches)} " + tr("matched_headings"),
                     Modifier.weight(1f),
                 )
-                TextButton(onClick = { filter = OutlineFilter() }) { Text(tr("clear")) }
+                TextButton(shape = MaterialTheme.shapes.medium, onClick = { filter = OutlineFilter() }) { Text(tr("clear")) }
             }
-        if (filtered.isEmpty()) Text(tr("no_results"), Modifier.padding(24.dp))
-        LazyColumn(Modifier.fillMaxHeight(0.8f)) {
-            items(filtered, key = { it.start }) { heading ->
-                val children =
-                    document.headings.any {
-                        it.start > heading.start && it.start < heading.subtreeEnd
-                    }
-                val headingKey = keys.getValue(heading.start)
-                val isExpanded = filter.active || headingKey in expanded
-                Row(
-                    Modifier.fillMaxWidth()
-                        .padding(start = ((heading.level - 1).coerceAtMost(8) * 12).dp)
-                        .orgHeadingDrop(heading, editor.session) { source, placement ->
-                            model.moveHeading(source, heading, placement)
-                        },
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    if (children)
-                        IconButton(
-                            enabled = !filter.active,
-                            onClick = {
-                                expanded =
-                                    if (headingKey in expanded) expanded - headingKey
-                                    else expanded + headingKey
-                            },
-                            modifier = Modifier.testTag("outline.toggle.${heading.start}"),
-                        ) {
-                            Icon(
-                                if (isExpanded) Icons.Default.ExpandMore
-                                else Icons.Default.ChevronRight,
-                                tr(if (isExpanded) "collapse" else "expand") + " " + heading.title,
-                            )
+        if (filtered.isEmpty())
+            Text(
+                tr("no_results"),
+                Modifier.padding(horizontal = UiSpacing.edge, vertical = UiSpacing.xl),
+            )
+        moveError?.let {
+            Text(
+                it,
+                Modifier.padding(UiSpacing.edge).testTag("outline.moveError")
+                    .semantics { liveRegion = LiveRegionMode.Polite },
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
+        Box(Modifier.fillMaxWidth().fillMaxHeight(0.8f).clipToBounds()) {
+            LazyColumn(
+                Modifier.fillMaxSize().testTag("outline.list").outlineDrag(
+                    drag, listState, filtered, editor.session,
+                    document.text, ::move,
+                ),
+                state = listState,
+                userScrollEnabled = drag.source == null,
+            ) {
+                items(filtered, key = { it.start }) { heading ->
+                    val children =
+                        document.headings.any {
+                            it.start > heading.start && it.start < heading.subtreeEnd
                         }
-                    else Spacer(Modifier.width(48.dp))
-                    TextButton(
-                        onClick = {
-                            if (model.editor.value?.text == document.text) {
-                                model.jump(heading.start, focusEditor = true)
-                                close()
-                            }
-                        },
-                        modifier = Modifier.weight(1f).testTag("outline.heading.${heading.start}"),
-                    ) {
-                        Column(Modifier.fillMaxWidth()) {
-                            Text(
-                                heading.title,
-                                style =
-                                    DocumentTypography.body.copy(
-                                        fontWeight =
-                                            if (heading.level == 1)
-                                                androidx.compose.ui.text.font.FontWeight.SemiBold
-                                            else androidx.compose.ui.text.font.FontWeight.Normal
-                                    ),
-                            )
-                            if (heading.state.isNotEmpty())
-                                Row(
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                ) {
-                                    WorkflowIcon(heading)
-                                    Text(
-                                        heading.workflow.style(heading.state).label.ifEmpty {
-                                            heading.state
-                                        },
-                                        color = workflowColor(heading),
-                                        style = DocumentTypography.subheadline,
-                                    )
+                    val headingKey = keys.getValue(heading.start)
+                    val isExpanded = filter.active || headingKey in expanded
+                    val placement = drop?.takeIf { it.target.start == heading.start }?.placement
+                    val moves = headingMoveTargets(document, heading)
+                    Row(
+                        Modifier.fillMaxWidth()
+                            .testTag("heading.drop.${heading.start}")
+                            .semantics {
+                                placement?.let {
+                                    stateDescription = context.label("placement_${it.name.lowercase()}")
                                 }
+                            }
+                            .drawBehind {
+                                placement?.let {
+                                    if (it == HeadingPlacement.CHILD) drawRect(childContainer)
+                                    val line = UiSizes.activeBorder.toPx()
+                                    val y = if (it == HeadingPlacement.BEFORE) line / 2 else size.height - line / 2
+                                    val inset = if (it == HeadingPlacement.CHILD) edgePixels else 0f
+                                    drawLine(primary, Offset(inset, y), Offset(size.width, y), line)
+                                }
+                            }
+                            .graphicsLayer { alpha = if (drag.source?.item?.start == heading.start) 0.4f else 1f }
+                            .padding(horizontal = UiSpacing.edge)
+                            .padding(start = UiSpacing.outlineIndent * (heading.level - 1).coerceAtMost(8)),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        if (children)
+                            IconButton(
+                                enabled = !filter.active,
+                                onClick = {
+                                    expanded =
+                                        if (headingKey in expanded) expanded - headingKey
+                                        else expanded + headingKey
+                                },
+                                modifier = Modifier.testTag("outline.toggle.${heading.start}"),
+                            ) {
+                                Icon(
+                                    if (isExpanded) Icons.Default.ExpandMore
+                                    else Icons.Default.ChevronRight,
+                                    tr(if (isExpanded) "collapse" else "expand") + " " + heading.title,
+                                )
+                            }
+                        else Spacer(Modifier.width(UiSizes.touchTarget))
+                        TextButton(
+                            shape = MaterialTheme.shapes.medium,
+                            onClick = {
+                                if (model.editor.value?.text == document.text) {
+                                    model.jump(heading.start, focusEditor = true)
+                                    close()
+                                }
+                            },
+                            modifier =
+                                Modifier.weight(1f)
+                                    .testTag("outline.heading.${heading.start}")
+                                    .semantics {
+                                        customActions = moves.mapNotNull { (label, target, position) ->
+                                            target?.let {
+                                                CustomAccessibilityAction(context.label(label)) {
+                                                    move(heading, it, position)
+                                                    true
+                                                }
+                                            }
+                                        }
+                                    },
+                        ) {
+                            Column(Modifier.fillMaxWidth()) {
+                                Text(
+                                    heading.title,
+                                    style =
+                                        DocumentTypography.body.copy(
+                                            fontWeight =
+                                                if (heading.level == 1)
+                                                    androidx.compose.ui.text.font.FontWeight.SemiBold
+                                                else androidx.compose.ui.text.font.FontWeight.Normal
+                                        ),
+                                )
+                                if (heading.state.isNotEmpty())
+                                    Row(
+                                        horizontalArrangement = Arrangement.spacedBy(UiSpacing.controlGap),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        WorkflowIcon(heading)
+                                        Text(
+                                            heading.workflow.style(heading.state).label.ifEmpty {
+                                                heading.state
+                                            },
+                                            color = workflowColor(heading),
+                                            style = DocumentTypography.subheadline,
+                                        )
+                                    }
+                            }
                         }
                     }
-                    HeadingMoveMenu(model, document, heading, editor.session)
+                }
+            }
+            drag.source?.let { source ->
+                Surface(
+                    Modifier.offset {
+                            IntOffset(0, (drag.pointer.y - drag.rowHeight / 2f).roundToInt())
+                        }
+                        .fillMaxWidth().padding(horizontal = UiSpacing.edge)
+                        .clearAndSetSemantics { },
+                    shape = MaterialTheme.shapes.medium,
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    shadowElevation = 6.dp,
+                ) {
+                    Column(Modifier.padding(UiSpacing.md)) {
+                        Text(source.item.title, style = DocumentTypography.body)
+                        drop?.let {
+                            Text(
+                                tr("placement_${it.placement.name.lowercase()}") + ": " + it.target.title,
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -186,9 +289,9 @@ fun OutlineSheet(model: OrgendaViewModel, editor: EditorState, close: () -> Unit
             onDismissRequest = { showFilter = false },
             sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
         ) {
-            Column(Modifier.verticalScroll(rememberScrollState()).padding(16.dp)) {
+            Column(Modifier.verticalScroll(rememberScrollState()).padding(UiSpacing.edge)) {
                 Text(tr("filter"), style = MaterialTheme.typography.titleLarge)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(UiSpacing.controlGap)) {
                     document.workflow.tokens.forEach { token ->
                         FilterChip(
                             token in filter.states,
@@ -253,8 +356,9 @@ fun OutlineSheet(model: OrgendaViewModel, editor: EditorState, close: () -> Unit
                         filter.copy(deadlineTo = it.date.toLocalDate().takeIf { _ -> it.enabled })
                 }
                 Row {
-                    TextButton(onClick = { filter = OutlineFilter() }) { Text(tr("reset")) }
+                    TextButton(shape = MaterialTheme.shapes.medium, onClick = { filter = OutlineFilter() }) { Text(tr("reset")) }
                     TextButton(
+                        shape = MaterialTheme.shapes.medium,
                         onClick = { showFilter = false },
                         modifier = Modifier.testTag("outline.filter.close"),
                     ) {
@@ -266,15 +370,10 @@ fun OutlineSheet(model: OrgendaViewModel, editor: EditorState, close: () -> Unit
     }
 }
 
-@Composable
-fun HeadingMoveMenu(
-    model: OrgendaViewModel,
+internal fun headingMoveTargets(
     document: OrgDocument,
     item: OrgHeading,
-    session: Long,
-    setState: ((String) -> Unit)? = null,
-) {
-    var menu by remember { mutableStateOf(false) }
+): List<Triple<String, OrgHeading?, HeadingPlacement>> {
     val parent =
         document.headings.lastOrNull {
             it.start < item.start && it.subtreeEnd > item.start && it.level < item.level
@@ -287,54 +386,10 @@ fun HeadingMoveMenu(
         document.headings.filter { it.level == item.level && parent(it.start) == parent?.start }
     val previous = siblings.lastOrNull { it.start < item.start }
     val next = siblings.firstOrNull { it.start > item.start }
-    Box {
-        IconButton(
-            onClick = { menu = true },
-            modifier =
-                Modifier.testTag("heading.drag.${item.start}")
-                    .orgDrag("heading", HeadingDrag(item, session)),
-        ) {
-            Icon(
-                Icons.Default.DragIndicator,
-                tr(if (setState != null) "actions" else "move"),
-                tint = mutedControlColor(),
-            )
-        }
-        DropdownMenu(menu, { menu = false }) {
-            if (setState != null) {
-                item.workflow.tokens.forEach { state ->
-                    DropdownMenuItem(
-                        text = { Text(item.workflow.style(state).label.ifEmpty { state }) },
-                        leadingIcon = {
-                            WorkflowIcon(
-                                item.workflow.style(state).icon,
-                                workflowColor(item.workflow.style(state).color),
-                            )
-                        },
-                        onClick = {
-                            menu = false
-                            setState(state)
-                        },
-                    )
-                }
-                HorizontalDivider()
-            }
-            listOf(
-                    Triple("up", previous, HeadingPlacement.BEFORE),
-                    Triple("down", next, HeadingPlacement.AFTER),
-                    Triple("indent", previous, HeadingPlacement.CHILD),
-                    Triple("outdent", parent, HeadingPlacement.AFTER),
-                )
-                .forEach { (label, target, placement) ->
-                    DropdownMenuItem(
-                        text = { Text(tr(label)) },
-                        enabled = target != null,
-                        onClick = {
-                            menu = false
-                            target?.let { model.moveHeading(item, it, placement) }
-                        },
-                    )
-                }
-        }
-    }
+    return listOf(
+        Triple("up", previous, HeadingPlacement.BEFORE),
+        Triple("down", next, HeadingPlacement.AFTER),
+        Triple("indent", previous, HeadingPlacement.CHILD),
+        Triple("outdent", parent, HeadingPlacement.AFTER),
+    )
 }

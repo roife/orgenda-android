@@ -8,7 +8,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import com.roifewu.orgenda.core.OrgHeading
 import java.time.*
 
@@ -27,19 +26,24 @@ fun RescheduleSheet(item: OrgHeading, close: () -> Unit, select: (LocalDate) -> 
         onDismissRequest = close,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
     ) {
-        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp)) {
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(UiSpacing.edge)) {
             Text(item.title, style = MaterialTheme.typography.titleLarge)
             Row {
-                TextButton(onClick = { select(LocalDate.now()) }) { Text(tr("today")) }
-                TextButton(onClick = { select(LocalDate.now().plusDays(1)) }) {
+                TextButton(shape = MaterialTheme.shapes.medium, onClick = { select(LocalDate.now()) }) { Text(tr("today")) }
+                TextButton(shape = MaterialTheme.shapes.medium, onClick = { select(LocalDate.now().plusDays(1)) }) {
                     Text(tr("tomorrow"))
                 }
             }
             DatePicker(date, showModeToggle = true)
-            Text(tr("reschedule_hint"), style = MaterialTheme.typography.bodySmall)
+            Text(
+                tr("reschedule_hint"),
+                Modifier.padding(vertical = UiSpacing.supportingTextExtraVertical),
+                style = MaterialTheme.typography.bodySmall,
+            )
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                TextButton(onClick = close) { Text(tr("cancel")) }
+                TextButton(shape = MaterialTheme.shapes.medium, onClick = close) { Text(tr("cancel")) }
                 Button(
+                    shape = MaterialTheme.shapes.medium,
                     onClick = {
                         date.selectedDateMillis?.let {
                             select(Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate())

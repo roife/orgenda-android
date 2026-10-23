@@ -44,7 +44,7 @@ class OrgendaApplication : Application() {
             shortcuts.map { (id, label) ->
                 ShortcutInfo.Builder(this, id)
                     .setShortLabel(getString(label))
-                    .setIcon(Icon.createWithResource(this, R.drawable.ic_orgenda))
+                    .setIcon(Icon.createWithResource(this, R.mipmap.ic_launcher))
                     .setIntent(
                         Intent(this, MainActivity::class.java)
                             .setAction(Intent.ACTION_VIEW)

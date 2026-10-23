@@ -31,7 +31,7 @@ internal fun CalendarDateHeading(date: LocalDate, month: YearMonth, yearOnly: Bo
         else {
             append(date.format(DateTimeFormatter.ofPattern(pattern, locale)))
             withStyle(weekdayStyle) {
-                append(" · ")
+                append(" ")
                 append(date.dayOfWeek.getDisplayName(TextStyle.SHORT, locale))
             }
         }

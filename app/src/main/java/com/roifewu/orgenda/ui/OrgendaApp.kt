@@ -8,6 +8,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -20,6 +21,8 @@ import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.roifewu.orgenda.EditorState
@@ -303,12 +306,20 @@ fun OrgendaApp(model: OrgendaViewModel, intents: StateFlow<Intent?>, consumed: (
                                         else Text(tr(page))
                                     },
                                     actions = {
-                                        if (workspace.syncing)
-                                            CircularProgressIndicator(
-                                                Modifier.size(20.dp),
-                                                strokeWidth = 2.dp,
-                                            )
-                                        if (page != "agenda")
+                                        if (workspace.syncing) {
+                                            val syncLabel = tr("syncing")
+                                            Box(
+                                                Modifier.size(UiSizes.touchTarget),
+                                                contentAlignment = androidx.compose.ui.Alignment.Center,
+                                            ) {
+                                                CircularProgressIndicator(
+                                                    Modifier.size(UiSizes.progressIndicator)
+                                                        .semantics { contentDescription = syncLabel },
+                                                    strokeWidth = UiSizes.progressStroke,
+                                                )
+                                            }
+                                        }
+                                        if (page != "agenda" && page != "search")
                                             IconButton(
                                                 onClick = { openSettings() },
                                                 enabled = !starting,
@@ -352,11 +363,13 @@ fun OrgendaApp(model: OrgendaViewModel, intents: StateFlow<Intent?>, consumed: (
                                     editor == null &&
                                     page == "agenda"
                             )
-                                ExtendedFloatingActionButton(
+                                FloatingActionButton(
                                     onClick = { startCapture() },
-                                    icon = { Icon(Icons.Default.Add, null) },
-                                    text = { Text(tr("new_task")) },
-                                )
+                                    shape = CircleShape,
+                                    elevation = subtleFabElevation(),
+                                ) {
+                                    Icon(Icons.Default.Add, tr("new_task"))
+                                }
                         },
                         snackbarHost = { SnackbarHost(snackbar) },
                     ) { insets ->
@@ -387,7 +400,7 @@ fun OrgendaApp(model: OrgendaViewModel, intents: StateFlow<Intent?>, consumed: (
                                                     {
                                                         Text(
                                                             tr(key),
-                                                            Modifier.padding(horizontal = 8.dp),
+                                                            Modifier.padding(horizontal = UiSpacing.sm),
                                                         )
                                                     }
                                                 },
@@ -403,7 +416,8 @@ fun OrgendaApp(model: OrgendaViewModel, intents: StateFlow<Intent?>, consumed: (
                                 }
                             else if (workspace.workspace == null)
                                 Column(
-                                    Modifier.fillMaxSize().padding(24.dp),
+                                    Modifier.fillMaxSize()
+                                        .padding(horizontal = UiSpacing.edge, vertical = UiSpacing.xl),
                                     verticalArrangement = Arrangement.Center,
                                     horizontalAlignment =
                                         androidx.compose.ui.Alignment.CenterHorizontally,
@@ -416,6 +430,7 @@ fun OrgendaApp(model: OrgendaViewModel, intents: StateFlow<Intent?>, consumed: (
                                         Text(it, color = MaterialTheme.colorScheme.error)
                                     }
                                     Button(
+                                        shape = MaterialTheme.shapes.medium,
                                         onClick = {
                                             starting = true
                                             coroutineScope.launch {
@@ -434,7 +449,7 @@ fun OrgendaApp(model: OrgendaViewModel, intents: StateFlow<Intent?>, consumed: (
                                     ) {
                                         Text(tr("retry"))
                                     }
-                                    TextButton(onClick = { openSettings("workspace") }) {
+                                    TextButton(shape = MaterialTheme.shapes.medium, onClick = { openSettings("workspace") }) {
                                         Text(tr("local_folder"))
                                     }
                                 }
@@ -640,12 +655,13 @@ fun OrgendaApp(model: OrgendaViewModel, intents: StateFlow<Intent?>, consumed: (
                         title = { Text(tr("unsaved")) },
                         text = { Text(tr("save_failed")) },
                         confirmButton = {
-                            TextButton(onClick = { leaveDraft = false }) {
+                            TextButton(shape = MaterialTheme.shapes.medium, onClick = { leaveDraft = false }) {
                                 Text(tr("continue_editing"))
                             }
                         },
                         dismissButton = {
                             TextButton(
+                                shape = MaterialTheme.shapes.medium,
                                 onClick = {
                                     model.discardEditor()
                                     leaveDraft = false

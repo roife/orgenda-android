@@ -133,7 +133,7 @@ fun TimestampControl(source: String, edit: () -> Unit) {
                     .combinedClickable(onClick = edit, onLongClick = { menu = true }),
         ) {
             Row(
-                Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                Modifier.padding(horizontal = UiSpacing.sm, vertical = UiSpacing.xs),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
@@ -171,10 +171,10 @@ fun ClockPreview(source: String) {
         Row(
             Modifier.fillMaxWidth().padding(vertical = 1.dp),
             verticalAlignment = Alignment.Top,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            horizontalArrangement = Arrangement.spacedBy(UiSpacing.controlGap),
         ) {
-            Icon(Icons.Default.Schedule, null, Modifier.size(16.dp), tint = secondary)
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Icon(Icons.Default.Schedule, null, Modifier.size(UiSizes.iconSmall), tint = secondary)
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(UiSpacing.xxs)) {
                 Text(
                     tr(if (duration == null) "running_clock" else "clock"),
                     style =

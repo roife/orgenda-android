@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A 72dp artboard centered in the adaptive icon's 108dp canvas. -->
+<inset xmlns:android="http://schemas.android.com/apk/res/android"
+    android:drawable="@drawable/ic_orgenda"
+    android:inset="16.666667%"/>

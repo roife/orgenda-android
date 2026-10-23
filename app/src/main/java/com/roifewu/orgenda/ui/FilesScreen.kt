@@ -8,12 +8,15 @@ package com.roifewu.orgenda.ui
 import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -26,6 +29,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.*
@@ -85,15 +89,35 @@ internal fun deletedFileRoots(
 internal fun FileFolderList(
     folder: String,
     modifier: Modifier = Modifier,
-    content: LazyListScope.() -> Unit,
+    snapshot: WorkspaceSnapshot? = null,
+    targeted: (String?) -> Unit = {},
+    move: (FileEntity, String) -> Unit = { _, _ -> },
+    content: LazyListScope.(String) -> Unit,
 ) {
     val states = rememberSaveableStateHolder()
-    states.SaveableStateProvider(folder) {
-        LazyColumn(
-            modifier.testTag("files.browser"),
-            contentPadding = PaddingValues(bottom = 96.dp),
-            content = content,
-        )
+    PageTransition(
+        targetState = folder,
+        modifier = modifier,
+        direction = { previous, next ->
+            when {
+                previous == next -> 0
+                previous.isEmpty() || next.startsWith("$previous/") -> 1
+                next.isEmpty() || previous.startsWith("$next/") -> -1
+                else -> 0
+            }
+        },
+    ) { shownFolder ->
+        states.SaveableStateProvider(shownFolder) {
+            val list = rememberLazyListState()
+            LazyColumn(
+                Modifier.fillMaxSize().testTag("files.browser").then(
+                    if (snapshot != null) Modifier.fileListDrop(list, snapshot, targeted, move) else Modifier
+                ),
+                state = list,
+                contentPadding = PaddingValues(bottom = UiSpacing.listBottomWithFab),
+                content = { content(shownFolder) },
+            )
+        }
     }
 }
 
@@ -182,11 +206,16 @@ internal fun FilesTopAppBar(
     state: FilesScreenState,
     settings: () -> Unit,
 ) {
+    var parentTargeted by remember(state.folder) { mutableStateOf(false) }
     TopAppBar(
         title = {
             Row(
+                modifier = Modifier.orgDrop("file", accepts = { acceptsFileDrop(snapshot, it, state.folder) }) { payload ->
+                    val source = payload as FileEntity
+                    model.moveFile(source, (if (state.folder.isEmpty()) "" else "${state.folder}/") + source.path.substringAfterLast('/'))
+                },
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(UiSpacing.sm),
             ) {
                 Text(
                     state.folder.ifEmpty { tr("files") },
@@ -195,7 +224,7 @@ internal fun FilesTopAppBar(
                     overflow = TextOverflow.Ellipsis,
                 )
                 if (snapshot.syncing)
-                    CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                    CircularProgressIndicator(Modifier.size(UiSizes.progressIndicator), strokeWidth = UiSizes.progressStroke)
                 else
                     Icon(
                         when {
@@ -210,7 +239,7 @@ internal fun FilesTopAppBar(
                                 else -> "synced"
                             }
                         ),
-                        Modifier.size(20.dp),
+                        Modifier.size(UiSizes.iconMedium),
                         tint =
                             if (snapshot.syncError != null) MaterialTheme.colorScheme.error
                             else MaterialTheme.colorScheme.onSurfaceVariant,
@@ -219,7 +248,21 @@ internal fun FilesTopAppBar(
         },
         navigationIcon = {
             if (state.folder.isNotEmpty())
-                IconButton(onClick = { state.folder = state.folder.substringBeforeLast('/', "") }) {
+                IconButton(
+                    onClick = { state.folder = state.folder.substringBeforeLast('/', "") },
+                    modifier = Modifier.testTag("files.parent").orgDrop(
+                        "file",
+                        targeted = { parentTargeted = it },
+                        accepts = { acceptsFileDrop(snapshot, it, state.folder.substringBeforeLast('/', "")) },
+                    ) { payload ->
+                        val source = payload as FileEntity
+                        val parent = state.folder.substringBeforeLast('/', "")
+                        model.moveFile(source, (if (parent.isEmpty()) "" else "$parent/") + source.path.substringAfterLast('/'))
+                    },
+                    colors = IconButtonDefaults.iconButtonColors(
+                        containerColor = if (parentTargeted) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent,
+                    ),
+                ) {
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, tr("back"))
                 }
         },
@@ -232,16 +275,6 @@ internal fun FilesTopAppBar(
                 Icon(Icons.Default.DeleteOutline, tr("trash"))
             }
         },
-        modifier =
-            Modifier.orgDrop("file", accepts = { acceptsFileDrop(snapshot, it, state.folder) }) {
-                payload ->
-                val source = payload as FileEntity
-                model.moveFile(
-                    source,
-                    (if (state.folder.isEmpty()) "" else "${state.folder}/") +
-                        source.path.substringAfterLast('/'),
-                )
-            },
     )
 }
 
@@ -282,7 +315,9 @@ private fun FilesAddButton(
     Box(modifier) {
         FloatingActionButton(
             onClick = { addMenu = true },
+            shape = CircleShape,
             modifier = Modifier.testTag("files.add"),
+            elevation = subtleFabElevation(),
         ) {
             Icon(Icons.Default.Add, tr("add"))
         }
@@ -419,8 +454,9 @@ internal fun FilesScreen(
     fun open(file: FileEntity) {
         if (file.directory) folder = file.path else model.open(file)
     }
+    var dropFolder by remember(snapshot.workspace?.id, folder) { mutableStateOf<String?>(null) }
     val row: @Composable (FileEntity, Boolean) -> Unit = { file, showPath ->
-        var targeted by remember { mutableStateOf(false) }
+        val targeted = dropFolder == file.path
         var menu by remember(file.id) { mutableStateOf(false) }
         FileSwipeActions(file, { togglePin(file) }, { move = file }, { delete = file }) {
             Box {
@@ -434,8 +470,7 @@ internal fun FilesScreen(
                     headlineContent = { Text(file.path.substringAfterLast('/')) },
                     supportingContent = {
                         Column {
-                            if (showPath || file.path.substringBeforeLast('/', "") != folder)
-                                Text(file.path)
+                            if (showPath) Text(file.path)
                             else if (file.directory) Text(tr("folder"))
                             else
                                 snapshot.documents[file.path]?.let {
@@ -460,41 +495,66 @@ internal fun FilesScreen(
                                 if (file.directory) Icons.Default.Folder
                                 else Icons.Default.Description,
                                 tr("drag_file"),
-                                Modifier.size(48.dp).orgDrag("file", file).padding(12.dp),
+                                Modifier.size(UiSizes.touchTarget).padding(UiSpacing.md),
                             )
                         }
                     },
                     trailingContent = {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             if (file.pinned)
-                                Icon(Icons.Default.PushPin, tr("pinned"), Modifier.size(16.dp))
-                            IconButton(onClick = { menu = true }) {
-                                Icon(
-                                    Icons.Default.MoreVert,
-                                    tr("actions"),
-                                    tint = mutedControlColor(),
-                                )
+                                Icon(Icons.Default.PushPin, tr("pinned"), Modifier.size(UiSizes.iconSmall))
+                            // Keep secondary actions anchored to the overflow button; long press moves the row.
+                            Box {
+                                IconButton(onClick = { menu = true }) {
+                                    Icon(
+                                        Icons.Default.MoreVert,
+                                        tr("actions"),
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                                DropdownMenu(menu, { menu = false }) {
+                                    DropdownMenuItem(
+                                        text = { Text(tr("open")) },
+                                        onClick = {
+                                            menu = false
+                                            open(file)
+                                        },
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text(tr("preview")) },
+                                        onClick = {
+                                            menu = false
+                                            preview = file
+                                        },
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text(tr(if (file.pinned) "unpin" else "pin")) },
+                                        onClick = {
+                                            menu = false
+                                            togglePin(file)
+                                        },
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text(tr("move")) },
+                                        onClick = {
+                                            menu = false
+                                            move = file
+                                        },
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text(tr("delete")) },
+                                        onClick = {
+                                            menu = false
+                                            delete = file
+                                        },
+                                    )
+                                }
                             }
                         }
                     },
                     modifier =
-                        (if (file.directory)
-                                Modifier.orgDrop(
-                                    "file",
-                                    { targeted = it },
-                                    accepts = { acceptsFileDrop(snapshot, it, file.path) },
-                                ) { payload ->
-                                    val source = payload as FileEntity
-                                    model.moveFile(
-                                        source,
-                                        file.path + "/" + source.path.substringAfterLast('/'),
-                                    )
-                                }
-                            else Modifier)
-                            .combinedClickable(
-                                onClick = { open(file) },
-                                onLongClick = { menu = true },
-                            )
+                        Modifier                            .orgDrag("file", file)
+                            .clickable { open(file) }
                             .semantics {
                                 customActions =
                                     listOf(
@@ -515,43 +575,6 @@ internal fun FilesScreen(
                                     )
                             },
                 )
-                DropdownMenu(menu, { menu = false }) {
-                    DropdownMenuItem(
-                        text = { Text(tr("open")) },
-                        onClick = {
-                            menu = false
-                            open(file)
-                        },
-                    )
-                    DropdownMenuItem(
-                        text = { Text(tr("preview")) },
-                        onClick = {
-                            menu = false
-                            preview = file
-                        },
-                    )
-                    DropdownMenuItem(
-                        text = { Text(tr(if (file.pinned) "unpin" else "pin")) },
-                        onClick = {
-                            menu = false
-                            togglePin(file)
-                        },
-                    )
-                    DropdownMenuItem(
-                        text = { Text(tr("move")) },
-                        onClick = {
-                            menu = false
-                            move = file
-                        },
-                    )
-                    DropdownMenuItem(
-                        text = { Text(tr("delete")) },
-                        onClick = {
-                            menu = false
-                            delete = file
-                        },
-                    )
-                }
             }
         }
     }
@@ -562,8 +585,12 @@ internal fun FilesScreen(
             modifier = Modifier.fillMaxSize(),
         ) {
             key(snapshot.workspace?.id) {
-                FileFolderList(folder, Modifier.fillMaxSize()) {
-                    if (folder.isEmpty()) {
+                FileFolderList(
+                    folder, Modifier.fillMaxSize(), snapshot,
+                    targeted = { dropFolder = it },
+                    move = { file, destination -> model.moveFile(file, destination) },
+                ) { shownFolder ->
+                    if (shownFolder.isEmpty()) {
                         val pinned =
                             visible
                                 .filter { it.pinned }
@@ -576,7 +603,10 @@ internal fun FilesScreen(
                             item {
                                 Text(
                                     tr("pinned_hint"),
-                                    Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                                    Modifier.padding(
+                                        horizontal = UiSpacing.edge,
+                                        vertical = UiSpacing.xs + UiSpacing.supportingTextExtraVertical,
+                                    ),
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
@@ -592,7 +622,10 @@ internal fun FilesScreen(
                             item {
                                 Text(
                                     tr("recent_files_hint"),
-                                    Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                                    Modifier.padding(
+                                        horizontal = UiSpacing.edge,
+                                        vertical = UiSpacing.xs + UiSpacing.supportingTextExtraVertical,
+                                    ),
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
@@ -600,13 +633,25 @@ internal fun FilesScreen(
                         items(recent, key = { "recent:${it.id}" }) { row(it, true) }
                         item { ListSectionHeader(tr("all_files")) }
                     }
-                    val children = visibleFolderFiles(visible, folder)
-                    if (children.isEmpty()) item { Text(tr("no_files"), Modifier.padding(24.dp)) }
-                    items(children, key = { it.id }) { row(it, folder.isNotEmpty()) }
+                    val children = visibleFolderFiles(visible, shownFolder)
+                    if (children.isEmpty())
+                        item {
+                            Text(
+                                tr("no_files"),
+                                Modifier.padding(horizontal = UiSpacing.edge, vertical = UiSpacing.xl),
+                            )
+                        }
+                    items(children, key = { it.id }) {
+                        row(
+                            it,
+                            shownFolder.isNotEmpty() ||
+                                it.path.substringBeforeLast('/', "") != shownFolder,
+                        )
+                    }
                 }
             }
         }
-        FilesAddButton(model, snapshot, state, Modifier.align(Alignment.BottomEnd).padding(16.dp))
+        FilesAddButton(model, snapshot, state, Modifier.align(Alignment.BottomEnd).padding(UiSpacing.edge))
     }
     create?.let { kind ->
         TextPrompt(
@@ -632,6 +677,7 @@ internal fun FilesScreen(
             text = { Text(file.path + "\n\n" + tr("confirm_delete")) },
             confirmButton = {
                 TextButton(
+                    shape = MaterialTheme.shapes.medium,
                     onClick = {
                         model.moveFile(file, file.path, trash = true)
                         delete = null
@@ -640,7 +686,7 @@ internal fun FilesScreen(
                     Text(tr("delete"))
                 }
             },
-            dismissButton = { TextButton(onClick = { delete = null }) { Text(tr("cancel")) } },
+            dismissButton = { TextButton(shape = MaterialTheme.shapes.medium, onClick = { delete = null }) { Text(tr("cancel")) } },
         )
     }
     preview?.let { file ->
@@ -661,6 +707,7 @@ internal fun FilesScreen(
             },
             confirmButton = {
                 TextButton(
+                    shape = MaterialTheme.shapes.medium,
                     onClick = {
                         preview = null
                         open(file)
@@ -669,7 +716,7 @@ internal fun FilesScreen(
                     Text(tr("open"))
                 }
             },
-            dismissButton = { TextButton(onClick = { preview = null }) { Text(tr("close")) } },
+            dismissButton = { TextButton(shape = MaterialTheme.shapes.medium, onClick = { preview = null }) { Text(tr("close")) } },
         )
     }
     if (trash) {
@@ -684,20 +731,21 @@ internal fun FilesScreen(
                         item {
                             Text(
                                 message,
-                                Modifier.padding(16.dp),
+                                Modifier.padding(UiSpacing.edge),
                                 color = MaterialTheme.colorScheme.error,
                             )
                         }
                     }
                     val deleted = deletedFileRoots(snapshot.files, snapshot.operations)
                     if (deleted.isEmpty())
-                        item { Text(tr("no_deleted_items"), Modifier.padding(16.dp)) }
+                        item { Text(tr("no_deleted_items"), Modifier.padding(UiSpacing.edge)) }
                     items(deleted, key = { it.id }) { file ->
                         ListItem(
                             headlineContent = { Text(file.path.substringAfterLast('/')) },
                             supportingContent = { Text(file.path) },
                             trailingContent = {
                                 TextButton(
+                                    shape = MaterialTheme.shapes.medium,
                                     enabled = !restoring,
                                     onClick = {
                                         restoring = true
@@ -733,7 +781,7 @@ internal fun FilesScreen(
                 }
             },
             confirmButton = {
-                TextButton(onClick = { trash = false }, enabled = !restoring) { Text(tr("close")) }
+                TextButton(shape = MaterialTheme.shapes.medium, onClick = { trash = false }, enabled = !restoring) { Text(tr("close")) }
             },
         )
     }

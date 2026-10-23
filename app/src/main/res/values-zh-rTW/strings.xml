@@ -308,6 +308,7 @@
     <string name="recent_files_hint">&#x958B;&#x555F;&#x904E;&#x7684;&#x6A94;&#x6848;&#x6703;&#x986F;&#x793A;&#x65BC;&#x6B64;&#x3002;</string>
     <string name="no_deleted_items">&#x6C92;&#x6709;&#x5DF2;&#x522A;&#x9664;&#x7684;&#x9805;&#x76EE;</string>
     <string name="try_tag">&#x8A66;&#x8A66;&#x6A19;&#x7C64;</string>
+    <string name="search_journal">&#x65E5;&#x8A8C;</string>
     <string name="recent_journals">&#x6700;&#x8FD1;&#x7684;&#x65E5;&#x8A8C;</string>
     <string name="browse_files">&#x700F;&#x89BD;&#x6A94;&#x6848;</string>
     <string name="all_results">&#x5168;&#x90E8;&#x7D50;&#x679C;</string>
@@ -356,4 +357,9 @@
     <string name="swipe_delete">&#x522A;&#x9664;</string>
     <string name="swipe_complete">&#x5B8C;&#x6210;</string>
     <string name="swipe_reopen">&#x6062;&#x5FA9;&#x672A;&#x5B8C;&#x6210;</string>
+    <string name="workflow_open">進行中</string>
+    <string name="workflow_closed">已結束</string>
+    <string name="workflow_defaults">預設狀態</string>
+    <string name="workflow_logging">日誌</string>
+    <string name="workflow_preset">經典工作流</string>
 </resources>

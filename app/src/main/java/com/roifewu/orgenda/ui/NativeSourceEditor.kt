@@ -1,6 +1,8 @@
 package com.roifewu.orgenda.ui
 
 import android.content.Context
+import androidx.compose.material3.dynamicDarkColorScheme
+import androidx.compose.material3.dynamicLightColorScheme
 import android.graphics.Typeface
 import android.text.*
 import android.text.style.BackgroundColorSpan
@@ -102,7 +104,11 @@ class NativeSourceEditor(context: Context, val history: EditorHistory) :
     private val parser = OrgParser()
     private var highlight: Job? = null
     private var generation = 0
-    var accent = 0xff32694b.toInt()
+    private val initialColors = UiColors(
+        if (resources.configuration.isNightModeActive) dynamicDarkColorScheme(context)
+        else dynamicLightColorScheme(context)
+    )
+    var accent = initialColors.sourceAccent
         set(value) {
             if (field != value) {
                 field = value
@@ -110,7 +116,7 @@ class NativeSourceEditor(context: Context, val history: EditorHistory) :
             }
         }
 
-    var codeAccent = 0xff8a6345.toInt()
+    var codeAccent = initialColors.sourceCodeAccent
         set(value) {
             if (field != value) {
                 field = value
@@ -118,7 +124,7 @@ class NativeSourceEditor(context: Context, val history: EditorHistory) :
             }
         }
 
-    var syntaxColors: Map<String, Int> = emptyMap()
+    var syntaxColors: Map<String, Int> = initialColors.sourceSyntax(Workflow())
         set(value) {
             if (field != value) {
                 field = value
@@ -136,7 +142,8 @@ class NativeSourceEditor(context: Context, val history: EditorHistory) :
                 android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
         setHorizontallyScrolling(false)
         setBackgroundColor(android.graphics.Color.TRANSPARENT)
-        val pad = (16 * resources.displayMetrics.density).toInt()
+        setTextColor(initialColors.sourceForeground)
+        val pad = (UiSpacing.edge.value * resources.displayMetrics.density).toInt()
         setPadding(pad, pad, pad, pad)
         addTextChangedListener(
             object : TextWatcher {

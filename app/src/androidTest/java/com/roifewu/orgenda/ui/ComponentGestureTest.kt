@@ -360,6 +360,38 @@ class ComponentGestureTest {
         compose.runOnIdle { assertEquals(1, toggles) }
     }
 
+    @Test
+    fun calendarTaskTitleCanDragWithoutOpeningPreviewAndStillRespondsToTap() {
+        val item = task()
+        var opens = 0
+        var drops = 0
+        lateinit var view: View
+        compose.setContent {
+            MaterialTheme {
+                view = LocalView.current
+                Column(Modifier.fillMaxSize().padding(top = 64.dp)) {
+                    TaskRow(item, { opens++ }, {}, draggable = true, allowsSwipe = false)
+                    Spacer(Modifier.height(80.dp))
+                    Box(Modifier.fillMaxWidth().height(100.dp).testTag("gesture.date")
+                        .orgDrop("task") { assertEquals(item, it); drops++ }) {
+                        Text("Date")
+                    }
+                }
+            }
+        }
+        val source = compose.onNodeWithTag("agenda.item.title.${item.id}", useUnmergedTree = true)
+            .fetchSemanticsNode().boundsInRoot.center
+        val target = compose.onNodeWithTag("gesture.date").fetchSemanticsNode().boundsInRoot.center
+        val screen = IntArray(2)
+        compose.runOnIdle { view.getLocationOnScreen(screen) }
+        nativeDrag(source, target, screen, cancel = true)
+        compose.runOnIdle { assertEquals(0, drops); assertEquals(0, opens) }
+        nativeDrag(source, target, screen)
+        compose.runOnIdle { assertEquals(1, drops); assertEquals(0, opens) }
+        compose.onNodeWithTag("agenda.item.title.${item.id}", useUnmergedTree = true).performTouchInput { click() }
+        compose.runOnIdle { assertEquals(1, opens) }
+    }
+
     @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
     @Test
     fun nativeDragHandleDoesNotOpenItsRowsLongPressMenu() {

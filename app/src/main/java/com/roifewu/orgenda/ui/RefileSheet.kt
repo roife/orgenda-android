@@ -8,7 +8,6 @@ import androidx.compose.foundation.lazy.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import com.roifewu.orgenda.OrgendaViewModel
 import com.roifewu.orgenda.core.OrgHeading
 import com.roifewu.orgenda.platform.SyncWorker
@@ -43,12 +42,18 @@ fun RefileSheet(
                 confirmValueChange = { it != SheetValue.Hidden || !saving },
             ),
     ) {
-        Column(Modifier.padding(16.dp)) {
-            Text(tr("refile"), style = MaterialTheme.typography.headlineSmall)
-            Text(item.title)
-            error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-            if (saving) LinearProgressIndicator(Modifier.fillMaxWidth())
-            if (targets.isEmpty()) Text(tr("no_refile_targets"), Modifier.padding(vertical = 24.dp))
+        Column(Modifier.fillMaxWidth().padding(vertical = UiSpacing.edge)) {
+            Column(Modifier.padding(horizontal = UiSpacing.edge)) {
+                Text(tr("refile"), style = MaterialTheme.typography.headlineSmall)
+                Text(item.title)
+                error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                if (saving) LinearProgressIndicator(Modifier.fillMaxWidth())
+            }
+            if (targets.isEmpty())
+                Text(
+                    tr("no_refile_targets"),
+                    Modifier.padding(horizontal = UiSpacing.edge, vertical = UiSpacing.xl),
+                )
             LazyColumn(Modifier.weight(1f, false)) {
                 items(targets, key = { it.id }) { target ->
                     ListItem(
@@ -91,7 +96,14 @@ fun RefileSheet(
                     )
                 }
             }
-            TextButton(onClick = close, enabled = !saving) { Text(tr("cancel")) }
+            TextButton(
+                shape = MaterialTheme.shapes.medium,
+                onClick = close,
+                enabled = !saving,
+                modifier = Modifier.padding(horizontal = UiSpacing.edge),
+            ) {
+                Text(tr("cancel"))
+            }
         }
     }
 }

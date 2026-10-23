@@ -308,6 +308,7 @@
     <string name="recent_files_hint">Files you open will appear here.</string>
     <string name="no_deleted_items">No deleted items</string>
     <string name="try_tag">Try a tag</string>
+    <string name="search_journal">Journal</string>
     <string name="recent_journals">Recent journal entries</string>
     <string name="browse_files">Browse files</string>
     <string name="all_results">All results</string>
@@ -356,4 +357,9 @@
     <string name="swipe_delete">Delete</string>
     <string name="swipe_complete">Complete</string>
     <string name="swipe_reopen">Reopen</string>
+    <string name="workflow_open">Open</string>
+    <string name="workflow_closed">Closed</string>
+    <string name="workflow_defaults">Default states</string>
+    <string name="workflow_logging">Logging</string>
+    <string name="workflow_preset">Classic workflow</string>
 </resources>

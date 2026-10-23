@@ -11,7 +11,6 @@ import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.unit.dp
 import com.roifewu.orgenda.OrgendaViewModel
 import com.roifewu.orgenda.core.*
 import kotlinx.coroutines.*
@@ -91,9 +90,9 @@ fun TimestampSheet(
         Column(
             Modifier.fillMaxWidth()
                 .verticalScroll(rememberScrollState())
-                .padding(20.dp)
+                .padding(UiSpacing.edge)
                 .imePadding(),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(UiSpacing.md),
         ) {
             Text(tr("timestamp"), style = MaterialTheme.typography.titleLarge)
             draft.keyword?.let { keyword ->
@@ -144,8 +143,9 @@ fun TimestampSheet(
             else Text(tr("repeat_rule_invalid"), color = MaterialTheme.colorScheme.error)
             error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                TextButton(onClick = ::dismiss, enabled = !saving) { Text(tr("cancel")) }
+                TextButton(shape = MaterialTheme.shapes.medium, onClick = ::dismiss, enabled = !saving) { Text(tr("cancel")) }
                 Button(
+                    shape = MaterialTheme.shapes.medium,
                     onClick = {
                         saving = true
                         scope.launch {

@@ -122,7 +122,7 @@ fun PreviewImage(model: OrgendaViewModel, document: OrgDocument, reference: Imag
                     color = MaterialTheme.colorScheme.errorContainer,
                     shape = MaterialTheme.shapes.medium,
                 ) {
-                    Column(Modifier.fillMaxWidth().padding(12.dp)) {
+                    Column(Modifier.fillMaxWidth().padding(UiSpacing.md)) {
                         Text(
                             tr("image_failed"),
                             style =
@@ -132,7 +132,7 @@ fun PreviewImage(model: OrgendaViewModel, document: OrgDocument, reference: Imag
                         )
                         Text(reference.label, style = DocumentTypography.footnote)
                         Text(failure.orEmpty(), style = DocumentTypography.footnote)
-                        OutlinedButton(onClick = { retry++ }) {
+                        OutlinedButton(shape = MaterialTheme.shapes.medium, onClick = { retry++ }) {
                             Icon(Icons.Default.Refresh, null)
                             Text(tr("retry"), style = DocumentTypography.footnote)
                         }

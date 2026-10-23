@@ -70,7 +70,7 @@ class PreviewLayoutTest {
             val heading =
                 compose
                     .onNode(
-                        isHeading() and hasAnyAncestor(hasTestTag("preview.block.${habit.start}")),
+                        isHeading() and hasAnyAncestor(blockTag(habit.start)),
                         useUnmergedTree = true,
                     )
                     .fetchSemanticsNode()
@@ -164,8 +164,12 @@ class PreviewLayoutTest {
     }
 
     private fun scrollToBlock(start: Int): SemanticsNodeInteraction {
-        val tag = "preview.block.$start"
-        compose.onNodeWithTag("document.preview").performScrollToNode(hasTestTag(tag))
-        return compose.onNodeWithTag(tag)
+        val tag = blockTag(start)
+        compose.onNodeWithTag("document.preview").performScrollToNode(tag)
+        return compose.onNode(tag)
     }
+
+    // Heading drop indicators and ordinary blocks expose different container tags.
+    private fun blockTag(start: Int) =
+        hasTestTag("preview.block.$start") or hasTestTag("heading.drop.$start")
 }

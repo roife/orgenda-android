@@ -82,7 +82,7 @@ private fun PlanningSwitch(
 ) {
     Box(
         modifier
-            .size(48.dp)
+            .size(UiSizes.touchTarget)
             .toggleable(value = checked, role = Role.Switch, onValueChange = change)
             .semantics { contentDescription = label },
         contentAlignment = Alignment.Center,
@@ -116,11 +116,12 @@ fun PlanningField(
         }
         if (value.enabled) {
             androidx.compose.foundation.layout.FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
+                horizontalArrangement = Arrangement.spacedBy(UiSpacing.sm),
+                verticalArrangement = Arrangement.spacedBy(UiSpacing.xs),
             ) {
                 if (label == "scheduled") {
                     TextButton(
+                        shape = MaterialTheme.shapes.medium,
                         onClick = {
                             change(
                                 value.copy(date = LocalDate.now().atTime(value.date.toLocalTime()))
@@ -130,6 +131,7 @@ fun PlanningField(
                         Text(tr("today"))
                     }
                     TextButton(
+                        shape = MaterialTheme.shapes.medium,
                         onClick = {
                             change(
                                 value.copy(
@@ -144,10 +146,10 @@ fun PlanningField(
                 }
             }
             FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
+                horizontalArrangement = Arrangement.spacedBy(UiSpacing.sm),
+                verticalArrangement = Arrangement.spacedBy(UiSpacing.xs),
             ) {
-                OutlinedButton(onClick = { datePicker = true }) {
+                OutlinedButton(shape = MaterialTheme.shapes.medium, onClick = { datePicker = true }) {
                     Text(value.date.toLocalDate().toString())
                 }
                 if (showTimeToggle)
@@ -172,7 +174,7 @@ fun PlanningField(
                         label = { Text(tr("time")) },
                     )
                 if (value.time)
-                    OutlinedButton(onClick = { timePicker = true }) {
+                    OutlinedButton(shape = MaterialTheme.shapes.medium, onClick = { timePicker = true }) {
                         Text(value.date.toLocalTime().toString())
                     }
             }
@@ -189,6 +191,7 @@ fun PlanningField(
             onDismissRequest = { datePicker = false },
             confirmButton = {
                 TextButton(
+                    shape = MaterialTheme.shapes.medium,
                     onClick = {
                         state.selectedDateMillis?.let {
                             change(
@@ -207,7 +210,7 @@ fun PlanningField(
                     Text(tr("save"))
                 }
             },
-            dismissButton = { TextButton(onClick = { datePicker = false }) { Text(tr("cancel")) } },
+            dismissButton = { TextButton(shape = MaterialTheme.shapes.medium, onClick = { datePicker = false }) { Text(tr("cancel")) } },
         ) {
             DatePicker(state)
         }
@@ -233,12 +236,12 @@ fun PlanningField(
             Surface(
                 shape = MaterialTheme.shapes.extraLarge,
                 modifier =
-                    Modifier.padding(16.dp)
+                    Modifier.padding(UiSpacing.edge)
                         .widthIn(max = 380.dp)
                         .heightIn(max = (configuration.screenHeightDp - 64).coerceAtLeast(220).dp),
             ) {
                 Column(
-                    Modifier.verticalScroll(rememberScrollState()).padding(20.dp),
+                    Modifier.verticalScroll(rememberScrollState()).padding(UiSpacing.edge),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     Text(tr("time"), style = MaterialTheme.typography.titleLarge)
@@ -251,8 +254,9 @@ fun PlanningField(
                             )
                         }
                         Spacer(Modifier.weight(1f))
-                        TextButton(onClick = { timePicker = false }) { Text(tr("cancel")) }
+                        TextButton(shape = MaterialTheme.shapes.medium, onClick = { timePicker = false }) { Text(tr("cancel")) }
                         TextButton(
+                            shape = MaterialTheme.shapes.medium,
                             onClick = {
                                 change(
                                     value.copy(
@@ -501,9 +505,9 @@ private fun ItemEditorForm(
         Column(
             Modifier.fillMaxWidth()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp)
+                .padding(horizontal = UiSpacing.edge)
                 .imePadding(),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(UiSpacing.md),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
@@ -511,8 +515,9 @@ private fun ItemEditorForm(
                     style = MaterialTheme.typography.titleLarge,
                     modifier = Modifier.weight(1f),
                 )
-                TextButton(onClick = ::dismiss, enabled = !saving) { Text(tr("cancel")) }
+                TextButton(shape = MaterialTheme.shapes.medium, onClick = ::dismiss, enabled = !saving) { Text(tr("cancel")) }
                 Button(
+                    shape = MaterialTheme.shapes.medium,
                     enabled =
                         !saving &&
                             title.isNotBlank() &&
@@ -676,6 +681,7 @@ private fun ItemEditorForm(
                 )
             if (item.habit) HabitHistory(item)
             TextButton(
+                shape = MaterialTheme.shapes.medium,
                 onClick = {
                     runCatching { draftSource() }
                         .onSuccess {
@@ -689,6 +695,7 @@ private fun ItemEditorForm(
             }
             if (error != null)
                 TextButton(
+                    shape = MaterialTheme.shapes.medium,
                     onClick = {
                         runCatching { draftSource() }
                             .onSuccess { clipboard.setText(AnnotatedString(it)) }
@@ -706,6 +713,7 @@ private fun ItemEditorForm(
                         ?.singleOrNull()
                 if (latest != null && current != null)
                     TextButton(
+                        shape = MaterialTheme.shapes.medium,
                         onClick = {
                             latestVersion =
                                 current to
@@ -717,16 +725,20 @@ private fun ItemEditorForm(
             }
             if (newDocument == null)
                 Row {
-                    TextButton(onClick = { refile = true }, enabled = !dirty && !saving) {
+                    TextButton(shape = MaterialTheme.shapes.medium, onClick = { refile = true }, enabled = !dirty && !saving) {
                         Text(tr("refile"))
                     }
-                    TextButton(onClick = { archive = true }, enabled = !dirty && !saving) {
+                    TextButton(shape = MaterialTheme.shapes.medium, onClick = { archive = true }, enabled = !dirty && !saving) {
                         Text(tr("archive"))
                     }
                 }
             if (newDocument == null && dirty)
-                Text(tr("save_before_move"), style = MaterialTheme.typography.bodySmall)
-            Spacer(Modifier.height(32.dp))
+                Text(
+                    tr("save_before_move"),
+                    Modifier.padding(vertical = UiSpacing.supportingTextExtraVertical),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            Spacer(Modifier.height(UiSpacing.xxl))
         }
     }
     if (confirmDiscard) DiscardDialog({ confirmDiscard = false }, close)
@@ -738,6 +750,7 @@ private fun ItemEditorForm(
             text = { Text(item.title) },
             confirmButton = {
                 TextButton(
+                    shape = MaterialTheme.shapes.medium,
                     onClick = {
                         archive = false
                         saving = true
@@ -759,7 +772,7 @@ private fun ItemEditorForm(
                     Text(tr("archive"))
                 }
             },
-            dismissButton = { TextButton(onClick = { archive = false }) { Text(tr("cancel")) } },
+            dismissButton = { TextButton(shape = MaterialTheme.shapes.medium, onClick = { archive = false }) { Text(tr("cancel")) } },
         )
     latestVersion?.let { (latest, source) ->
         AlertDialog(
@@ -776,6 +789,7 @@ private fun ItemEditorForm(
             },
             confirmButton = {
                 TextButton(
+                    shape = MaterialTheme.shapes.medium,
                     onClick = {
                         runCatching { draftSource() }
                             .onSuccess {
@@ -790,7 +804,7 @@ private fun ItemEditorForm(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { latestVersion = null }) { Text(tr("continue_editing")) }
+                TextButton(shape = MaterialTheme.shapes.medium, onClick = { latestVersion = null }) { Text(tr("continue_editing")) }
             },
         )
     }
@@ -808,7 +822,7 @@ private fun ItemEditorForm(
                 }
             },
             confirmButton = {
-                TextButton(onClick = { sourcePreview = false }) { Text(tr("close")) }
+                TextButton(shape = MaterialTheme.shapes.medium, onClick = { sourcePreview = false }) { Text(tr("close")) }
             },
         )
 }
@@ -849,7 +863,7 @@ fun RecurrenceField(value: String, change: (String) -> Unit) {
         retained = normalized
         change(normalized.token)
     }
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(UiSpacing.controlGap)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(tr("repeat"), Modifier.weight(1f))
             PlanningSwitch(
@@ -883,6 +897,7 @@ fun RecurrenceField(value: String, change: (String) -> Unit) {
                         else -> "repeat_from_schedule"
                     }
                 ),
+                Modifier.padding(vertical = UiSpacing.supportingTextExtraVertical),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -951,7 +966,7 @@ fun RecurrenceField(value: String, change: (String) -> Unit) {
                     color = MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.bodySmall,
                 )
-            TextButton(onClick = { advanced = !advanced }) { Text(tr("advanced")) }
+            TextButton(shape = MaterialTheme.shapes.medium, onClick = { advanced = !advanced }) { Text(tr("advanced")) }
             if (advanced)
                 Field(
                     value,
