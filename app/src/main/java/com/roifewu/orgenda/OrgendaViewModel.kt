@@ -11,9 +11,6 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.serialization.Serializable
-import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
 
 data class EditorState(
     val file: FileEntity,
@@ -47,23 +44,6 @@ data class GestureUndo(
     val id: Long = System.nanoTime(),
 )
 
-data class ConfigurationEdit(
-    val workspaceId: String,
-    val value: WorkspaceConfig,
-    val raw: String,
-    val baseline: String?,
-    val dirty: Boolean = false,
-    val saving: Boolean = false,
-    val error: String? = null,
-)
-
-@Serializable private data class ConfigurationRecovery(val raw: String, val baseline: String?)
-
-private val configurationDraftJson = Json {
-    encodeDefaults = true
-    prettyPrint = true
-}
-
 class OrgendaViewModel(application: Application) : AndroidViewModel(application) {
     val collapsedHeadings = mutableMapOf<String, Set<String>>()
     val editorHistories = mutableMapOf<Long, com.roifewu.orgenda.ui.EditorHistory>()
@@ -82,50 +62,20 @@ class OrgendaViewModel(application: Application) : AndroidViewModel(application)
     private var autosave: Job? = null
     private val openGeneration = java.util.concurrent.atomic.AtomicLong()
     private val editorSave = Mutex()
-    private val configurationSave = Mutex()
-    private var configurationAutosave: Job? = null
-    private val configurationRecovery =
-        app.getSharedPreferences("configuration-drafts", android.content.Context.MODE_PRIVATE)
-    private val mutableConfiguration = MutableStateFlow<ConfigurationEdit?>(null)
-    val configuration = mutableConfiguration.asStateFlow()
+    private val configurationEditor =
+        ConfigurationEditor(
+            workspace,
+            repository::saveConfiguration,
+            viewModelScope,
+            app.getSharedPreferences("configuration-drafts", android.content.Context.MODE_PRIVATE),
+        ) { workspaceId -> SyncWorker.enqueue(app, workspaceId) }
+    val configuration = configurationEditor.state
 
     init {
         viewModelScope.launch {
             app.ready.await()
             workspace.collect { snapshot ->
-                val workspaceId = snapshot.workspace?.id
-                if (workspaceId != null) {
-                    val draft = mutableConfiguration.value
-                    val baseline =
-                        snapshot.files
-                            .firstOrNull { it.path == "config.json" && !it.trashed }
-                            ?.contentBlob
-                    if (draft?.workspaceId != workspaceId) {
-                        val recovery =
-                            configurationRecovery.getString(workspaceId, null)?.let {
-                                runCatching { Json.decodeFromString<ConfigurationRecovery>(it) }
-                                    .getOrNull()
-                            }
-                        val value =
-                            recovery?.let {
-                                runCatching { ConfigurationCodec.decode(it.raw) }.getOrNull()
-                            } ?: snapshot.configuration
-                        mutableConfiguration.value =
-                            ConfigurationEdit(
-                                workspaceId,
-                                value,
-                                recovery?.raw ?: ConfigurationCodec.encode(snapshot.configuration),
-                                if (recovery != null) recovery.baseline else baseline,
-                                recovery != null,
-                            )
-                    } else if (!draft.dirty && !draft.saving)
-                        mutableConfiguration.value =
-                            draft.copy(
-                                value = snapshot.configuration,
-                                raw = ConfigurationCodec.encode(snapshot.configuration),
-                                baseline = baseline,
-                            )
-                }
+                configurationEditor.accept(snapshot)
                 val current = mutableEditor.value ?: return@collect
                 val file = snapshot.files.firstOrNull { it.id == current.file.id } ?: return@collect
                 if (
@@ -190,160 +140,19 @@ class OrgendaViewModel(application: Application) : AndroidViewModel(application)
 
     fun sync() = action { repository.sync(pull = true, manual = true) }
 
-    fun configure(value: WorkspaceConfig) {
-        val old = mutableConfiguration.value ?: return
-        configurationChanged(
-            old.copy(
-                value = value,
-                raw = configurationDraftJson.encodeToString(value),
-                dirty = true,
-                error = null,
-            )
-        )
-    }
+    fun configure(value: WorkspaceConfig) = configurationEditor.configure(value)
 
-    fun configureRaw(raw: String) {
-        val old = mutableConfiguration.value ?: return
-        val value = runCatching { ConfigurationCodec.decode(raw) }.getOrNull() ?: old.value
-        configurationChanged(old.copy(raw = raw, value = value, dirty = true, error = null))
-    }
+    fun configureRaw(raw: String) = configurationEditor.configureRaw(raw)
 
-    private fun configurationChanged(next: ConfigurationEdit) {
-        mutableConfiguration.value = next
-        configurationRecovery
-            .edit()
-            .putString(
-                next.workspaceId,
-                Json.encodeToString(ConfigurationRecovery(next.raw, next.baseline)),
-            )
-            .commit()
-        configurationAutosave?.cancel()
-        configurationAutosave = viewModelScope.launch {
-            delay(500)
-            withContext(NonCancellable) { runCatching { saveConfigurationNow() } }
-        }
-    }
-
-    suspend fun saveConfigurationNow() = configurationSave.withLock {
-        val draft = mutableConfiguration.value ?: return@withLock
-        if (!draft.dirty) return@withLock
-        mutableConfiguration.value = draft.copy(saving = true)
-        try {
-            val config = ConfigurationCodec.decode(draft.raw)
-            val saved = repository.saveConfiguration(config, draft.baseline, draft.workspaceId)
-            val latest = mutableConfiguration.value
-            if (latest?.workspaceId == draft.workspaceId) {
-                val updated =
-                    latest.copy(
-                        value = if (latest.raw == draft.raw) config else latest.value,
-                        baseline = saved.contentBlob,
-                        dirty = latest.raw != draft.raw,
-                        saving = false,
-                        error = null,
-                    )
-                mutableConfiguration.value = updated
-                if (!updated.dirty) configurationRecovery.edit().remove(draft.workspaceId).commit()
-                else
-                    configurationRecovery
-                        .edit()
-                        .putString(
-                            draft.workspaceId,
-                            Json.encodeToString(
-                                ConfigurationRecovery(updated.raw, updated.baseline)
-                            ),
-                        )
-                        .commit()
-            }
-            SyncWorker.enqueue(app, saved.workspaceId)
-        } catch (e: Exception) {
-            mutableConfiguration.update {
-                if (it?.workspaceId == draft.workspaceId) it.copy(saving = false, error = e.message)
-                else it
-            }
-            throw e
-        }
-    }
+    suspend fun saveConfigurationNow() = configurationEditor.saveNow()
 
     suspend fun saveConfigurationEdit(
         value: WorkspaceConfig,
         expected: WorkspaceConfig,
         expectedWorkspaceId: String,
-    ) =
-        withContext(NonCancellable + Dispatchers.IO) {
-            configurationSave.withLock {
-                val draft =
-                    mutableConfiguration.value ?: error("Workspace configuration is not ready")
-                require(
-                    workspace.value.workspace?.id == expectedWorkspaceId &&
-                        draft.workspaceId == expectedWorkspaceId
-                ) {
-                    "Workspace changed; reopen the editor before saving"
-                }
-                val candidateRaw = ConfigurationCodec.encode(value)
-                val current = ConfigurationCodec.decode(draft.raw)
-                // A recreated sheet may resume a request whose local commit already finished.
-                if (!draft.dirty && current == value) return@withLock
-                require(current == expected) {
-                    "Configuration changed; reopen the editor before saving"
-                }
-                configurationAutosave?.cancel()
-                mutableConfiguration.value = draft.copy(saving = true, error = null)
-                try {
-                    val saved =
-                        repository.saveConfiguration(value, draft.baseline, expectedWorkspaceId)
-                    mutableConfiguration.update { latest ->
-                        if (latest?.workspaceId != expectedWorkspaceId) latest
-                        else if (latest.raw == draft.raw)
-                            latest.copy(
-                                value = value,
-                                raw = candidateRaw,
-                                baseline = saved.contentBlob,
-                                dirty = false,
-                                saving = false,
-                                error = null,
-                            )
-                        else latest.copy(baseline = saved.contentBlob, saving = false, error = null)
-                    }
-                    val latest = mutableConfiguration.value
-                    if (latest?.workspaceId == expectedWorkspaceId) {
-                        if (!latest.dirty)
-                            configurationRecovery.edit().remove(expectedWorkspaceId).commit()
-                        else
-                            configurationRecovery
-                                .edit()
-                                .putString(
-                                    expectedWorkspaceId,
-                                    Json.encodeToString(
-                                        ConfigurationRecovery(latest.raw, latest.baseline)
-                                    ),
-                                )
-                                .commit()
-                    }
-                    SyncWorker.enqueue(app, saved.workspaceId)
-                } catch (e: Exception) {
-                    mutableConfiguration.update {
-                        if (it?.workspaceId == expectedWorkspaceId)
-                            it.copy(saving = false, error = e.message)
-                        else it
-                    }
-                    throw e
-                }
-            }
-        }
+    ) = configurationEditor.saveEdit(value, expected, expectedWorkspaceId)
 
-    fun discardConfiguration() {
-        configurationAutosave?.cancel()
-        val snapshot = workspace.value
-        val id = snapshot.workspace?.id ?: return
-        configurationRecovery.edit().remove(id).commit()
-        mutableConfiguration.value =
-            ConfigurationEdit(
-                id,
-                snapshot.configuration,
-                ConfigurationCodec.encode(snapshot.configuration),
-                snapshot.files.firstOrNull { it.path == "config.json" }?.contentBlob,
-            )
-    }
+    fun discardConfiguration() = configurationEditor.discard()
 
     private suspend fun parseEditor(file: FileEntity, text: String): OrgDocument? =
         withContext(Dispatchers.Default) {
@@ -532,64 +341,17 @@ class OrgendaViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun openOrgLink(origin: String, target: String) = action {
-        val parts = target.removePrefix("file:").split("::", limit = 2)
-        val local = target.startsWith("#") || target.startsWith("*")
-        val path =
-            if (local) origin
-            else
-                java.nio.file.Paths.get(origin.substringBeforeLast('/', ""))
-                    .resolve(parts[0])
-                    .normalize()
-                    .toString()
-        safePath(path)
+        val link = OrgLink.parse(origin, target)
+        val snapshot = workspace.value
         val file =
-            workspace.value.files.firstOrNull { it.path == path && !it.trashed }
-                ?: error("Linked file not found: $path")
-        val search = if (local) target else parts.getOrNull(1)
-        val document = workspace.value.documents[path]
-        val byte =
-            when {
-                search == null -> null
-                search.startsWith("#") ->
-                    document
-                        ?.headings
-                        ?.firstOrNull {
-                            it.properties["CUSTOM_ID"] == search.drop(1) ||
-                                it.properties["ID"] == search.drop(1)
-                        }
-                        ?.start
-                search.startsWith("*") ->
-                    document
-                        ?.headings
-                        ?.firstOrNull { it.title == search.trimStart('*', ' ') }
-                        ?.start
-                search.toIntOrNull() != null -> {
-                    val source = repository.text(file)
-                    SourceText(source)
-                        .byteOffset(
-                            source
-                                .lineSequence()
-                                .take((search.toInt() - 1).coerceAtLeast(0))
-                                .sumOf { it.length + 1 }
-                                .coerceAtMost(source.length)
-                        )
-                }
-                else ->
-                    document
-                        ?.syntax
-                        ?.nodes
-                        ?.firstOrNull {
-                            it.type in listOf("target", "radio_target") &&
-                                document.syntax.text(it).trim('<', '>') == search
-                        }
-                        ?.start
-                        ?: document?.text?.let { text ->
-                            SearchText.range(text, search)?.let {
-                                SourceText(text).byteOffset(it.first)
-                            }
-                        }
-            }
-        if (search != null) require(byte != null) { "Link target not found: $search" }
+            snapshot.files.firstOrNull { it.path == link.path && !it.trashed }
+                ?: error("Linked file not found: ${link.path}")
+        val document = snapshot.documents[link.path]
+        val text =
+            if (link.search?.toIntOrNull() != null) repository.text(file)
+            else document?.text.orEmpty()
+        val byte = link.byteOffset(document, text)
+        if (link.search != null) require(byte != null) { "Link target not found: ${link.search}" }
         open(file, byte)
     }
 
@@ -738,39 +500,10 @@ class OrgendaViewModel(application: Application) : AndroidViewModel(application)
     fun archive(item: OrgHeading) = action { archiveNow(item) }
 
     suspend fun archiveNow(item: OrgHeading) {
-        val document = workspace.value.documents[item.path] ?: error("Document changed")
-        require(document.text.sha256() == item.sourceHash)
-        val fileRules =
-            document.syntax.blocks
-                .filter {
-                    it.type == "keyword" &&
-                        it.start < (document.headings.firstOrNull()?.start ?: Int.MAX_VALUE)
-                }
-                .mapNotNull {
-                    Regex(
-                            "^#\\+(?:PROPERTY:[ \\t]+ARCHIVE|ARCHIVE:)[ \\t]*(.*)",
-                            RegexOption.IGNORE_CASE,
-                        )
-                        .find(document.syntax.text(it))
-                        ?.groupValues
-                        ?.get(1)
-                        ?.trim()
-                }
-        require(fileRules.size <= 1) { "Multiple archive declarations" }
-        var rule = fileRules.firstOrNull() ?: workspace.value.configuration.files.archive
-        document.headings
-            .filter { it.start <= item.start && it.subtreeEnd > item.start }
-            .forEach { ancestor -> ancestor.properties["ARCHIVE"]?.let { rule = it } }
-        val parts = rule.split("::")
-        require(parts.size == 2)
-        val parent = item.path.substringBeforeLast('/', "")
-        val relative = parts[0].trim().replace("%s", item.path.substringAfterLast('/'))
-        require(!relative.startsWith('/') && !relative.startsWith('~') && '%' !in relative)
-        val target = java.nio.file.Paths.get(parent).resolve(relative).normalize().toString()
-        safePath(target)
-        require(target.endsWith(".org") || target.endsWith(".org_archive"))
-        require(parts[1].isBlank() || parts[1].trim().matches(Regex("\\*+[ \\t]+\\S[^\\r\\n]*")))
-        repository.refile(item, target, archiveHeading = parts[1])
+        val snapshot = workspace.value
+        val document = snapshot.documents[item.path] ?: error("Document changed")
+        val target = ArchiveTarget.resolve(document, item, snapshot.configuration.files.archive)
+        repository.refile(item, target.path, archiveHeading = target.heading)
     }
 
     suspend fun newJournal(day: LocalDate, title: String, body: String) {
