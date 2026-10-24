@@ -4,7 +4,6 @@ import android.os.SystemClock
 import android.view.InputDevice
 import android.view.MotionEvent
 import android.view.View
-import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -12,10 +11,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.hapticfeedback.HapticFeedback
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
@@ -234,82 +230,6 @@ class ComponentGestureTest {
             assertEquals(HeadingPlacement.CHILD, headingDropPlacement(50f, 100f))
             assertEquals(HeadingPlacement.AFTER, headingDropPlacement(90f, 100f))
         }
-    }
-
-    @Test
-    fun nativeHeadingDragUsesDropZonesAndRejectsCancelledOrStaleDrops() {
-        val document =
-            NativeOrgEngine().use { it.parse("gesture.org", "* Source\n* Destination\n") }
-        val source = document.headings[0]
-        val target = document.headings[1]
-        var currentTarget by mutableStateOf(target)
-        val moves = mutableListOf<HeadingPlacement>()
-        var lifts = 0
-        lateinit var view: View
-        compose.setContent {
-            MaterialTheme {
-                view = LocalView.current
-                CompositionLocalProvider(
-                    LocalHapticFeedback provides
-                        object : HapticFeedback {
-                            override fun performHapticFeedback(
-                                hapticFeedbackType: HapticFeedbackType
-                            ) {
-                                lifts++
-                            }
-                        }
-                ) {
-                    Column(Modifier.fillMaxSize()) {
-                        Spacer(Modifier.height(64.dp))
-                        IconButton(
-                            onClick = {},
-                            modifier =
-                                Modifier.size(64.dp)
-                                    .testTag("gesture.source")
-                                    .orgDrag("heading", HeadingDrag(source, 9)),
-                        ) {
-                            Text("Drag")
-                        }
-                        Spacer(Modifier.height(80.dp))
-                        Box(
-                            Modifier.fillMaxWidth()
-                                .height(100.dp)
-                                .background(MaterialTheme.colorScheme.surfaceContainer)
-                                .orgHeadingDrop(currentTarget, 9) { item, placement ->
-                                    assertEquals(source, item)
-                                    moves += placement
-                                }
-                        ) {
-                            Text(target.title)
-                        }
-                    }
-                }
-            }
-        }
-        val origin =
-            compose.onNodeWithTag("gesture.source").fetchSemanticsNode().boundsInRoot.center
-        val bounds =
-            compose.onNodeWithTag("heading.drop.${target.start}").fetchSemanticsNode().boundsInRoot
-        val screen = IntArray(2)
-        compose.runOnIdle { view.getLocationOnScreen(screen) }
-        for (fraction in listOf(0.1f, 0.5f, 0.9f)) nativeDrag(
-            origin,
-            Offset(bounds.center.x, bounds.top + bounds.height * fraction),
-            screen,
-        )
-        compose.runOnIdle {
-            assertEquals("Native drags lifted", 3, lifts)
-            assertEquals(
-                listOf(HeadingPlacement.BEFORE, HeadingPlacement.CHILD, HeadingPlacement.AFTER),
-                moves,
-            )
-        }
-        nativeDrag(origin, bounds.center, screen, cancel = true)
-        compose.runOnIdle { assertEquals(3, moves.size) }
-        nativeDrag(origin, bounds.center, screen) {
-            compose.runOnIdle { currentTarget = target.copy(sourceHash = "changed") }
-        }
-        compose.runOnIdle { assertEquals(3, moves.size) }
     }
 
     @Test

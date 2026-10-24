@@ -92,6 +92,18 @@ internal fun Modifier.orgDragScroll(
     )
 }
 
+// Android drag events report root coordinates; drop resolution works in LazyColumn-local
+// space, including the offset of any content above the viewport.
+private fun listLocalPointer(
+    bounds: LayoutCoordinates,
+    event: DragAndDropEvent,
+    list: LazyListState,
+): Offset {
+    val native = event.toAndroidDragEvent()
+    return bounds.localPositionOf(bounds.findRootCoordinates(), Offset(native.x, native.y)) +
+        Offset(0f, list.layoutInfo.viewportStartOffset.toFloat())
+}
+
 @Stable
 internal class NativeDragScrollState(private val list: LazyListState) {
     var coordinates: LayoutCoordinates? = null
@@ -99,9 +111,7 @@ internal class NativeDragScrollState(private val list: LazyListState) {
 
     fun update(event: DragAndDropEvent) {
         val bounds = coordinates?.takeIf { it.isAttached } ?: return
-        val native = event.toAndroidDragEvent()
-        pointer = bounds.localPositionOf(bounds.findRootCoordinates(), Offset(native.x, native.y)) +
-            Offset(0f, list.layoutInfo.viewportStartOffset.toFloat())
+        pointer = listLocalPointer(bounds, event, list)
     }
 }
 
@@ -126,9 +136,7 @@ internal fun Modifier.previewHeadingDrop(
             source.item.path != first.path || source.item.sourceHash != first.sourceHash
         ) return false
         val bounds = coordinates?.takeIf { it.isAttached } ?: return false
-        val native = event.toAndroidDragEvent()
-        drag.pointer = bounds.localPositionOf(bounds.findRootCoordinates(), Offset(native.x, native.y)) +
-            Offset(0f, list.layoutInfo.viewportStartOffset.toFloat())
+        drag.pointer = listLocalPointer(bounds, event, list)
         drag.source = source
         drag.moved = true
         return true
@@ -236,80 +244,3 @@ internal fun acceptsHeadingDrop(drag: HeadingDrag, target: OrgHeading, session: 
         drag.item.path == target.path &&
         drag.item.sourceHash == target.sourceHash &&
         target.start !in drag.item.start until drag.item.subtreeEnd
-
-@Composable
-internal fun Modifier.orgHeadingDrop(
-    target: OrgHeading,
-    session: Long,
-    move: (OrgHeading, HeadingPlacement) -> Unit,
-): Modifier {
-    var placement by remember(target.start, session) { mutableStateOf<HeadingPlacement?>(null) }
-    var coordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
-    val latestTarget by rememberUpdatedState(target)
-    val latestMove by rememberUpdatedState(move)
-    val color = MaterialTheme.colorScheme.primary
-    val dropContainer = uiColors().headingDropContainer
-    val context = LocalContext.current
-    LaunchedEffect(target.sourceHash) { placement = null }
-    fun payload(event: DragAndDropEvent): HeadingDrag? {
-        val data = event.toAndroidDragEvent().localState as? OrgDrag ?: return null
-        return (data.value as? HeadingDrag)?.takeIf {
-            data.kind == "heading" && acceptsHeadingDrop(it, latestTarget, session)
-        }
-    }
-    fun position(event: DragAndDropEvent): HeadingPlacement? {
-        val bounds = coordinates?.takeIf { it.isAttached } ?: return null
-        val native = event.toAndroidDragEvent()
-        val point = bounds.localPositionOf(bounds.findRootCoordinates(), Offset(native.x, native.y))
-        return headingDropPlacement(point.y, bounds.size.height.toFloat())
-    }
-    val callback =
-        remember(session) {
-            object : DragAndDropTarget {
-                override fun onEntered(event: DragAndDropEvent) {
-                    placement = if (payload(event) != null) position(event) else null
-                }
-
-                override fun onMoved(event: DragAndDropEvent) {
-                    placement = if (payload(event) != null) position(event) else null
-                }
-
-                override fun onExited(event: DragAndDropEvent) {
-                    placement = null
-                }
-
-                override fun onEnded(event: DragAndDropEvent) {
-                    placement = null
-                }
-
-                override fun onDrop(event: DragAndDropEvent): Boolean {
-                    val source = payload(event)
-                    val destination = position(event)
-                    placement = null
-                    if (source == null || destination == null) return false
-                    latestMove(source.item, destination)
-                    return true
-                }
-            }
-        }
-    return onGloballyPositioned { coordinates = it }
-        .testTag("heading.drop.${target.start}")
-        .semantics {
-            placement?.let { stateDescription = context.label("placement_${it.name.lowercase()}") }
-        }
-        .drawBehind {
-            placement?.let { drop ->
-                if (drop == HeadingPlacement.CHILD) drawRect(dropContainer)
-                val inset = if (drop == HeadingPlacement.CHILD) UiSpacing.edge.toPx() else 0f
-                val line = UiSizes.activeBorder.toPx()
-                val y = if (drop == HeadingPlacement.BEFORE) line / 2 else size.height - line / 2
-                drawLine(color, Offset(inset, y), Offset(size.width, y), line)
-            }
-        }
-        .dragAndDropTarget(
-            shouldStartDragAndDrop = { event ->
-                event.mimeTypes().contains(orgDragMime) && payload(event) != null
-            },
-            target = callback,
-        )
-}
