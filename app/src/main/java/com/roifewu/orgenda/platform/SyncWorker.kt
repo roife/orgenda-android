@@ -15,6 +15,7 @@ class SyncWorker(context: Context, parameters: WorkerParameters) :
             app.repository.sync(
                 inputData.getString("workspace") ?: app.repository.state.value.workspace?.id,
                 inputData.getBoolean("pull", true),
+                manual = inputData.getBoolean("manual", false),
             )
             app.reminders.refresh(
                 app.repository.state.value,
@@ -33,10 +34,15 @@ class SyncWorker(context: Context, parameters: WorkerParameters) :
     }
 
     companion object {
-        fun enqueue(context: Context, workspace: String? = null, pull: Boolean = false) {
+        fun enqueue(
+            context: Context,
+            workspace: String? = null,
+            pull: Boolean = false,
+            manual: Boolean = false,
+        ) {
             val request =
                 OneTimeWorkRequestBuilder<SyncWorker>()
-                    .setInputData(workDataOf("workspace" to workspace, "pull" to pull))
+                    .setInputData(workDataOf("workspace" to workspace, "pull" to pull, "manual" to manual))
                     .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
                     .build()
             WorkManager.getInstance(context)

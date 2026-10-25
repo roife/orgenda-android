@@ -928,9 +928,10 @@ private fun WebDavDialog(model: OrgendaViewModel, close: () -> Unit) {
                         password.isNotEmpty(),
                 onClick = {
                     connecting = true
+                    error = null
                     scope.launch {
                         try {
-                            withContext(Dispatchers.IO) {
+                            val workspaceId = withContext(Dispatchers.IO) {
                                 model.saveConfigurationNow()
                                 model.repository.connectWebDav(
                                     address.trim(),
@@ -938,7 +939,10 @@ private fun WebDavDialog(model: OrgendaViewModel, close: () -> Unit) {
                                     password,
                                 )
                             }
+                            SyncWorker.enqueue(model.app, workspaceId, pull = true, manual = true)
                             close()
+                        } catch (e: CancellationException) {
+                            throw e
                         } catch (e: Exception) {
                             error = e.message
                             connecting = false

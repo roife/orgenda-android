@@ -2,9 +2,14 @@ package com.roifewu.orgenda.data
 
 import android.util.Xml
 import com.roifewu.orgenda.core.*
+import java.io.InterruptedIOException
 import java.util.UUID
 import java.util.concurrent.TimeUnit
+import kotlin.coroutines.AbstractCoroutineContextElement
+import kotlin.coroutines.CoroutineContext
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import okhttp3.*
 import okhttp3.HttpUrl.Companion.toHttpUrl
@@ -47,20 +52,46 @@ class WebDavBackend(
     private val authorization = okhttp3.Credentials.basic(username, password)
     private val nutstore = root.host == "dav.jianguoyun.com"
 
+    private class ConnectionTest(val client: OkHttpClient, val deadlineNanos: Long) :
+        AbstractCoroutineContextElement(Key) {
+        companion object Key : CoroutineContext.Key<ConnectionTest>
+    }
+
     private fun url(path: String): HttpUrl {
         safePath(path, allowEmpty = true)
         return root.newBuilder().addPathSegments(path).build()
     }
 
-    private fun version(revision: String?): Boolean =
-        revision != null &&
-            !revision.startsWith("W/") &&
-            (nutstore || revision.startsWith('"') && revision.endsWith('"'))
+    private fun version(revision: String?): Boolean {
+        if (
+            revision.isNullOrEmpty() ||
+                revision.startsWith("W/", ignoreCase = true) ||
+                revision.any { it.isISOControl() || it.isWhitespace() || it == '*' || it == ',' }
+        ) return false
+        if (revision.startsWith('"') && revision.endsWith('"'))
+            return revision.length > 2 && revision.substring(1, revision.lastIndex).none { it == '"' }
+        return nutstore && '"' !in revision
+    }
 
-    private fun response(request: Request): Response {
+    private fun checkedVersion(revision: String?): String {
+        if (!version(revision))
+            throw StorageFailure.Unsupported("Server has no reliable version for conditional writes")
+        return revision!!
+    }
+
+    private suspend fun response(request: Request): Response {
+        val context = currentCoroutineContext()
+        val test = context[ConnectionTest]
         var current = request
         repeat(5) {
-            val response = client.newCall(current).execute()
+            context.ensureActive()
+            val call = (test?.client ?: client).newCall(current)
+            if (test != null) {
+                // Setup, redirects, response bodies and cleanup share the same time budget.
+                call.timeout().deadlineNanoTime(test.deadlineNanos)
+                call.timeout().throwIfReached()
+            }
+            val response = call.execute()
             if (response.code in listOf(301, 302, 303, 307, 308)) {
                 val next = response.header("Location")?.let { current.url.resolve(it) }
                 val code = response.code
@@ -88,7 +119,7 @@ class WebDavBackend(
         throw StorageFailure.Unavailable("Too many redirects")
     }
 
-    private fun request(
+    private suspend fun request(
         method: String,
         target: HttpUrl,
         bytes: ByteArray? = null,
@@ -147,7 +178,7 @@ class WebDavBackend(
         return bytes
     }
 
-    private fun list(path: String): List<RemoteEntry> {
+    private suspend fun list(path: String, depth: Int = 1): List<RemoteEntry> {
         val xml =
             """<?xml version="1.0"?><d:propfind xmlns:d="DAV:"><d:prop><d:resourcetype/><d:getetag/><d:getcontentlength/></d:prop></d:propfind>"""
                 .toByteArray()
@@ -155,14 +186,17 @@ class WebDavBackend(
                 "PROPFIND",
                 url(path),
                 xml,
-                mapOf("Depth" to "1", "Content-Type" to "application/xml; charset=utf-8"),
+                mapOf("Depth" to depth.toString(), "Content-Type" to "application/xml; charset=utf-8"),
             )
             .use { response ->
                 checked(response, path)
                 val parser =
                     Xml.newPullParser().apply {
                         setFeature(XmlPullParser.FEATURE_PROCESS_NAMESPACES, true)
-                        setInput(bytes(response, 16 * 1024 * 1024).inputStream(), "UTF-8")
+                        setInput(
+                            bytes(response, if (depth == 0) 65536 else 16 * 1024 * 1024).inputStream(),
+                            "UTF-8",
+                        )
                     }
                 val entries = mutableListOf<RemoteEntry>()
                 var href = ""
@@ -244,6 +278,9 @@ class WebDavBackend(
                         require(segments.none { '/' in it || '\\' in it })
                         val relative = segments.joinToString("/")
                         safePath(relative, true)
+                        if (depth == 0) require(relative == path && directory) {
+                            "Workspace root is not a folder"
+                        }
                         if (relative != path)
                             entries += RemoteEntry(relative, relative, etag, directory, size)
                     }
@@ -322,17 +359,37 @@ class WebDavBackend(
         expected: RemoteVersion?,
     ): RemoteContent =
         withContext(Dispatchers.IO) {
-            safePath(path)
-            parents(path)
-            if (expected != null && !version(expected.revision))
-                throw StorageFailure.Unsupported(
-                    "Server has no reliable version for conditional writes"
-                )
-            if (expected == null && nutstore) {
-                val parent = path.substringBeforeLast('/', "")
-                val temp =
-                    (if (parent.isEmpty()) "" else "$parent/") +
-                        ".orgenda-upload-${UUID.randomUUID()}"
+            sendWrite(path, bytes, expected)
+            readVerified(path, bytes)
+        }
+
+    private suspend fun readVerified(path: String, expected: ByteArray): RemoteContent {
+        val saved = read(path)
+        if (!saved.bytes.contentEquals(expected)) throw StorageFailure.Conflict(path)
+        return saved
+    }
+
+    private fun writeStatus(response: Response, path: String, allowPreconditionFailure: Boolean): Int {
+        if (!allowPreconditionFailure || response.code != 412) checked(response, path)
+        return response.code
+    }
+
+    private suspend fun sendWrite(
+        path: String,
+        bytes: ByteArray,
+        expected: RemoteVersion?,
+        allowPreconditionFailure: Boolean = false,
+    ): Int {
+        safePath(path)
+        val revision = expected?.let { checkedVersion(it.revision) }
+        parents(path)
+        return if (expected == null && nutstore) {
+            val parent = path.substringBeforeLast('/', "")
+            val temp =
+                (if (parent.isEmpty()) "" else "$parent/") +
+                    ".orgenda-upload-${UUID.randomUUID()}"
+            var moved = false
+            try {
                 request("PUT", url(temp), bytes, mapOf("If-None-Match" to "*")).use {
                     checked(it, temp)
                 }
@@ -341,21 +398,25 @@ class WebDavBackend(
                         url(temp),
                         headers = mapOf("Destination" to url(path).toString(), "Overwrite" to "F"),
                     )
-                    .use { checked(it, path) }
-            } else {
-                request(
-                        "PUT",
-                        url(path),
-                        bytes,
-                        if (expected == null) mapOf("If-None-Match" to "*")
-                        else mapOf("If-Match" to expected.revision!!),
-                    )
-                    .use { checked(it, path) }
+                    .use {
+                        moved = it.isSuccessful
+                        writeStatus(it, path, allowPreconditionFailure)
+                    }
+            } finally {
+                // This UUID path belongs to this upload, including a PUT/MOVE with a lost response.
+                if (!moved) runCatching { request("DELETE", url(temp)).close() }
             }
-            val saved = read(path)
-            if (!saved.bytes.contentEquals(bytes)) throw StorageFailure.Conflict(path)
-            saved
+        } else {
+            request(
+                    "PUT",
+                    url(path),
+                    bytes,
+                    if (expected == null) mapOf("If-None-Match" to "*")
+                    else mapOf("If-Match" to revision!!),
+                )
+                .use { writeStatus(it, path, allowPreconditionFailure) }
         }
+    }
 
     override suspend fun mkdir(path: String) =
         withContext(Dispatchers.IO) {
@@ -389,21 +450,21 @@ class WebDavBackend(
         directory: Boolean,
     ) =
         withContext(Dispatchers.IO) {
-            parents(to)
             val headers = mutableMapOf("Destination" to url(to).toString(), "Overwrite" to "F")
             if (!directory) {
-                require(expected != null && version(expected.revision)) {
+                require(expected != null) {
                     "A reliable source version is required"
                 }
-                headers["If-Match"] = expected.revision!!
+                headers["If-Match"] = checkedVersion(expected.revision)
             }
+            parents(to)
             request("MOVE", url(from), headers = headers).use { checked(it, from) }
         }
 
     suspend fun ensureRootDuringSetup() =
         withContext(Dispatchers.IO) {
             try {
-                list("")
+                list("", depth = 0)
                 return@withContext
             } catch (_: StorageFailure.Missing) {}
             var target = root.newBuilder().encodedPath("/").build()
@@ -414,48 +475,69 @@ class WebDavBackend(
                     if (response.code != 405) checked(response, target.encodedPath)
                 }
             }
-            list("")
+            list("", depth = 0)
         }
 
-    override suspend fun probe() =
-        withContext(Dispatchers.IO) {
-            list("") // Reconnection must never recreate a workspace deleted elsewhere.
-            val path = ".orgenda-probe-${UUID.randomUUID()}"
-            var current: RemoteContent? = null
-            try {
-                val first = write(path, "first".toByteArray(), null)
-                current = first
-                val collision = runCatching {
-                    write(path, "collision".toByteArray(), null)
-                }
-                    .exceptionOrNull()
-                require(collision is StorageFailure.Conflict) { "Server ignores create protection" }
-                val second =
-                    write(
-                        path,
-                        "second".toByteArray(),
-                        RemoteVersion(first.entry.revision, first.hash),
-                    )
-                current = second
-                val stale = runCatching {
-                    write(
-                        path,
-                        "stale".toByteArray(),
-                        RemoteVersion(first.entry.revision, first.hash),
-                    )
-                }
-                    .exceptionOrNull()
-                require(stale is StorageFailure.Conflict) {
-                    "Server ignores stale-write protection"
-                }
-                require(read(path).hash == second.hash) { "Server modified protected content" }
-            } finally {
-                val revision = current?.entry?.revision
-                if (version(revision))
-                    runCatching {
-                        request("DELETE", url(path), headers = mapOf("If-Match" to revision!!))
-                            .close()
-                    }
+    override suspend fun probe() = testConnection(createRoot = false)
+
+    internal suspend fun testConnection(createRoot: Boolean, timeoutMillis: Long = 30000) {
+        val testClient =
+            client.newBuilder()
+                .connectTimeout(5, TimeUnit.SECONDS)
+                .readTimeout(10, TimeUnit.SECONDS)
+                .writeTimeout(10, TimeUnit.SECONDS)
+                .callTimeout(10, TimeUnit.SECONDS)
+                .retryOnConnectionFailure(false)
+                .build()
+        val test = ConnectionTest(
+            testClient,
+            System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMillis),
+        )
+        try {
+            withContext(Dispatchers.IO + test) {
+                if (createRoot) ensureRootDuringSetup()
+                else list("", depth = 0) // Reconnection must never recreate a deleted workspace.
+                verifyWrites()
             }
+        } catch (_: InterruptedIOException) {
+            throw StorageFailure.Unavailable(
+                "Connection test timed out. Check the address and network, then try again."
+            )
         }
+    }
+
+    private suspend fun verifyWrites() {
+        val path = ".orgenda-probe-${UUID.randomUUID()}"
+        var current: RemoteContent? = null
+        try {
+            val firstBytes = "first".toByteArray()
+            val secondBytes = "second".toByteArray()
+            sendWrite(path, firstBytes, null)
+            val first = readVerified(path, firstBytes)
+            current = first
+            val initialVersion = RemoteVersion(checkedVersion(first.entry.revision), first.hash)
+            require(
+                sendWrite(path, "collision".toByteArray(), null, allowPreconditionFailure = true) == 412
+            ) {
+                "Server ignores create protection"
+            }
+            sendWrite(path, secondBytes, initialVersion)
+            require(
+                sendWrite(path, "stale".toByteArray(), initialVersion, allowPreconditionFailure = true) == 412
+            ) {
+                "Server ignores stale-write protection"
+            }
+            val second = readVerified(path, secondBytes)
+            checkedVersion(second.entry.revision)
+            require(second.entry.revision != first.entry.revision) { "Server did not change the version" }
+            current = second
+        } finally {
+            val revision = current?.entry?.revision
+            if (version(revision))
+                runCatching {
+                    request("DELETE", url(path), headers = mapOf("If-Match" to revision!!))
+                        .close()
+                }
+        }
+    }
 }

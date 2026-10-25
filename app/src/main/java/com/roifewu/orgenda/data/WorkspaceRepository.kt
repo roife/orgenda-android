@@ -133,7 +133,7 @@ class WorkspaceRepository(
         )
     }
 
-    suspend fun connectWebDav(address: String, username: String, password: String) {
+    suspend fun connectWebDav(address: String, username: String, password: String): String {
         val existing =
             dao.workspaces().firstOrNull {
                 it.kind == "webdav" && it.root == address && it.username == username
@@ -148,14 +148,18 @@ class WorkspaceRepository(
                     username,
                 )
         val remote = WebDavBackend(address, username, password)
-        if (existing == null) remote.ensureRootDuringSetup()
-        remote.probe()
+        remote.testConnection(createRoot = existing == null)
         credentials.save(workspace.id, password)
         synchronized(backends) { backends[workspace.id] = remote }
-        connect(workspace, verified = true)
+        connect(workspace, verified = true, syncImmediately = false)
+        return workspace.id
     }
 
-    private suspend fun connect(workspace: WorkspaceEntity, verified: Boolean = false) {
+    private suspend fun connect(
+        workspace: WorkspaceEntity,
+        verified: Boolean = false,
+        syncImmediately: Boolean = true,
+    ) {
         if (!verified) backend(workspace).probe()
         prepareWorkspaceChange(workspace.id)
         stateMutex.withLock {
@@ -163,7 +167,7 @@ class WorkspaceRepository(
             setActive(workspace.id)
         }
         publish()
-        sync(workspace.id, pull = true, manual = true)
+        if (syncImmediately) sync(workspace.id, pull = true, manual = true)
     }
 
     suspend fun switchWorkspace(id: String) {
